@@ -1,0 +1,12 @@
+# Core runtime dependencies
+pydantic>=2.0.0
+
+# Development & test dependencies
+pytest>=7.4.0
+
+# Optional dependencies for Phase 2 & Phase 3 (Proxy & ONNX Engine)
+# fastapi>=0.100.0
+# uvicorn>=0.22.0
+# httpx>=0.24.0
+# onnxruntime>=1.16.0
+# tokenizers>=0.15.0

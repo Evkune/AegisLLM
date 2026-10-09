@@ -1,0 +1,48 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Large AI models, weights, checkpoints (stored on Hugging Face / Model Registries)
+*.onnx
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+checkpoints/
+models_cache/
+data/
+datasets/
+
+# Logs and environment variables
+*.log
+.env
+.env.*
+!.env.example
