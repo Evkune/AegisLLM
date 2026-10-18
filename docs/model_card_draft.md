@@ -4,7 +4,7 @@ Following the standard reporting framework established by Mitchell et al. (2019)
 
 ## 1. Model Details
 - **Model Name:** `AegisLLM-DeBERTa-v3-Small-Guard-INT8` (with `AegisLLM-ModernBERT-Guard-v1.0-INT8` for long-context RAG path).
-- **Developers:** Evan Gendrot & Team, Master's Engineering Project at **Universidad Politécnica de Madrid (ETSIINF - UPM)** in collaboration with **INSA Rennes** (Cybersecurity Track).
+- **Developers:** Evan Gendrot & Amaury Dubuc, Master's Engineering Project at **Universidad Politécnica de Madrid (ETSIINF - UPM)** in collaboration with **INSA Rennes** (Cybersecurity Track).
 - **Repository:** [https://github.com/Evkune/AegisLLM](https://github.com/Evkune/AegisLLM)
 - **Model Version:** `v1.0.0-rc1` (October 2026).
 - **Base Architecture:** `microsoft/deberta-v3-small` (`DebertaV2ForSequenceClassification`).

@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "Evan Gendrot", email = "evangendrot.35@gmail.com" }
+    { name = "Evan Gendrot", email = "evangendrot.35@gmail.com" },
+    { name = "Amaury Dubuc", email = "amaury.dubuc@insa-rennes.fr" }
 ]
 keywords = ["cybersecurity", "ai-security", "prompt-injection", "jailbreak", "llm-firewall", "owasp-llm01"]
 classifiers = [

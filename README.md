@@ -50,8 +50,8 @@ flowchart LR
         Norm --> Engine --> Decision
     end
 
-    Decision -->|Threat Score < 0.45 (ALLOW)| Upstream["Upstream LLM Service<br/>(OpenAI / vLLM / Ollama)"]
-    Decision -->|Threat Score >= 0.75 (BLOCK)| Rejection["HTTP 403 Forbidden<br/>SIEM Audit Event (CEF/Syslog)"]
+    Decision -->|"ALLOW: Threat Score < 0.45"| Upstream["Upstream LLM Service<br/>(OpenAI / vLLM / Ollama)"]
+    Decision -->|"BLOCK: Threat Score >= 0.75"| Rejection["HTTP 403 Forbidden<br/>SIEM Audit Event (CEF/Syslog)"]
 ```
 
 For comprehensive technical specifications, refer to [docs/architecture.md](docs/architecture.md).
@@ -170,6 +170,8 @@ AegisLLM/
 
 ## 📜 License & Authors
 
-* **Author:** **Evan Gendrot** ([@Evkune](https://github.com/Evkune))
-* **Academic Affiliation:** Universidad Politécnica de Madrid (UPM) / INSA Rennes
+* **Authors:**
+  * **Evan Gendrot** ([@Evkune](https://github.com/Evkune)) — INSA Rennes / UPM Erasmus
+  * **Amaury Dubuc** ([@AmauryDubuc](https://github.com/AmauryDubuc)) — INSA Rennes / UPM Erasmus
+* **Academic Affiliation:** Universidad Politécnica de Madrid (ETSIINF - UPM) / INSA Rennes (Cybersecurity Track)
 * **License:** Licensed under the [MIT License](LICENSE).
