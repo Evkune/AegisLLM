@@ -36,6 +36,7 @@ htmlcov/
 *.pt
 *.pth
 *.ckpt
+*.joblib
 checkpoints/
 models_cache/
 data/
