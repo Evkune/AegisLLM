@@ -9,27 +9,39 @@ project:
   multi_seeds: [42, 1337, 2026, 7, 99]
 
 # Execution Profiles:
-# - standard_smoke: 24,000 samples, single-run DeBERTa-v3-small (fast verification)
+# - t4_optimized: 36,000 samples, batch_size=16 (accum=2), FP32, DeBERTa-v3-base Teacher (22 mins on T4)
 # - high_compute_a100: 60,000 samples, DeBERTa-v3-large Teacher Distillation, FGM, Optuna, Model Soup
-active_profile: "high_compute_a100"
+active_profile: "t4_optimized"
 
 profiles:
-  standard_smoke:
-    target_size: 24000
+  t4_optimized:
+    target_size: 36000
     quotas:
-      benign: 12000
-      hard_negative_devops: 3600
-      benign_general: 8400
-      prompt_injection: 7200
-      direct_override: 4200
-      indirect_rag: 3000
-      jailbreak: 4800
-      jailbreak_persona: 3000
-      jailbreak_hypothetical: 1800
+      benign: 18000
+      hard_negative_devops: 5400
+      benign_general: 12600
+      prompt_injection: 10800
+      direct_override: 6300
+      indirect_rag: 4500
+      jailbreak: 7200
+      jailbreak_persona: 4500
+      jailbreak_hypothetical: 2700
+    batch_size: 16
+    gradient_accumulation_steps: 2
+    precision: "fp32"
     teacher_distillation:
-      enabled: false
+      enabled: true
+      teacher_model: "microsoft/deberta-v3-base"
+      teacher_batch_size: 16
+      alpha_distill: 0.40
+      temperature: 2.0
     adversarial_fgm:
-      enabled: false
+      enabled: true
+      epsilon: 0.50
+      emb_names: ["word_embeddings"]
+    model_soup:
+      enabled: true
+      top_k_checkpoints: 3
 
   high_compute_a100:
     target_size: 60000
@@ -43,6 +55,9 @@ profiles:
       jailbreak: 12000
       jailbreak_persona: 7500
       jailbreak_hypothetical: 4500
+    batch_size: 32
+    gradient_accumulation_steps: 1
+    precision: "bf16"
     teacher_distillation:
       enabled: true
       teacher_model: "microsoft/deberta-v3-large"
@@ -84,13 +99,13 @@ model:
   pad_to_multiple_of: 8
 
 training:
-  precision: "bf16"
-  per_device_train_batch_size: 32
-  per_device_eval_batch_size: 64
-  gradient_accumulation_steps: 1
+  precision: "fp32"
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 32
+  gradient_accumulation_steps: 2
   epochs: 4
   optimizer:
-    name: "adamw_torch_fused"
+    name: "adamw_torch"
     backbone_lr: 2.5e-5
     head_lr: 1.0e-4
     llrd_decay: 0.90
@@ -111,8 +126,8 @@ training:
   evaluation:
     eval_strategy: "steps"
     eval_steps: 175
-    metric_for_best_model: "eval_tpr_at_1pct_fpr"
-    greater_is_better: true
+    metric_for_best_model: "eval_loss"
+    greater_is_better: false
     early_stopping_patience: 3
 
 calibration:
