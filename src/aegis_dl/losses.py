@@ -32,11 +32,8 @@ class CostSensitiveAsymmetricFocalLoss(nn.Module):
         self.label_smoothing = float(label_smoothing)
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        device = targets.device
-        if self.gammas.device != device:
-            self.gammas = self.gammas.to(device)
-        if self.class_weights.device != device:
-            self.class_weights = self.class_weights.to(device)
+        gammas = self.gammas.to(logits.device)
+        class_weights = self.class_weights.to(logits.device)
 
         num_classes = logits.size(-1)
         probs = F.softmax(logits, dim=-1)
@@ -44,8 +41,8 @@ class CostSensitiveAsymmetricFocalLoss(nn.Module):
 
         # Probabilities and hyperparams for the true classes
         p_t = probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
-        gamma_t = self.gammas[targets]
-        weight_t = self.class_weights[targets]
+        gamma_t = gammas[targets]
+        weight_t = class_weights[targets]
 
         # Focal factor: (1 - p_t)^gamma_t
         clamped_p = p_t.clamp(min=1e-6, max=1.0 - 1e-6)
