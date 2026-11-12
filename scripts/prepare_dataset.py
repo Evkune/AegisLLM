@@ -297,6 +297,7 @@ def main():
     )
     parser = argparse.ArgumentParser(description="AegisLLM Data Pipeline & Zero-Leakage Splitter")
     parser.add_argument("--config", type=str, default=default_config)
+    parser.add_argument("--profile", type=str, default=None, help="Execution profile (standard_smoke or high_compute_a100)")
     parser.add_argument("--synthetic", action="store_true", help="Generate synthetic corpus for testing")
     parser.add_argument("--sample-size", type=int, default=None, help="Scale down dataset for fast local test")
     args = parser.parse_args()
@@ -305,14 +306,20 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
-    quotas = cfg["dataset"]["quotas"]
+    profile_name = args.profile or cfg.get("active_profile", "high_compute_a100")
+    profile = cfg.get("profiles", {}).get(profile_name, {})
+    quotas = profile.get("quotas", cfg.get("dataset", {}).get("quotas", {}))
+    target_size = profile.get("target_size", cfg.get("dataset", {}).get("target_size", 24000))
+    print(f"[*] Active Data Profile: '{profile_name}' (Target Size: {target_size:,} samples)")
+
     if args.sample_size:
-        scale = args.sample_size / cfg["dataset"]["target_size"]
+        scale = args.sample_size / target_size
         quotas = {k: max(10, int(v * scale)) for k, v in quotas.items()}
         print(f"[*] Scaling down dataset quotas for local smoke test: {quotas}")
 
     print("[*] Generating / Loading dataset...")
-    df = generate_synthetic_samples(quotas, seed=cfg["project"]["seed"])
+    seed = cfg["project"].get("default_seed", cfg["project"].get("seed", 42))
+    df = generate_synthetic_samples(quotas, seed=seed)
 
     print(f"[*] Applying MinHash LSH Graph Clustering on {len(df):,} samples...")
     df = cluster_and_assign_group_ids(
@@ -325,7 +332,7 @@ def main():
     train_df, val_df, test_df = partition_and_save_splits(
         df,
         output_dir=output_dir,
-        seed=cfg["project"]["seed"],
+        seed=seed,
     )
 
     # OOD Holdout Generation (XSTest & JBB)
