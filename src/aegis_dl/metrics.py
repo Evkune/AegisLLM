@@ -1,8 +1,5 @@
-"""
-Empirical evaluation metrics, calibration tests, and statistical tests for AegisLLM.
-"""
-
 from typing import Dict, Optional, Tuple
+
 import numpy as np
 from scipy import stats
 from sklearn.metrics import (
@@ -18,14 +15,15 @@ from sklearn.metrics import (
 )
 
 
+def _softmax_np(logits: np.ndarray) -> np.ndarray:
+    shifted = logits - np.max(logits, axis=-1, keepdims=True)
+    exp_vals = np.exp(shifted)
+    return exp_vals / np.sum(exp_vals, axis=-1, keepdims=True)
+
+
 def compute_binary_malicious_score(probs: np.ndarray) -> np.ndarray:
-    """
-    Computes binary malicious probability:
-    s_mal(x) = P(PROMPT_INJECTION) + P(JAILBREAK) = 1.0 - P(BENIGN)
-    """
     if probs.ndim == 1:
         return probs
-    # Class 0: BENIGN, Class 1: PROMPT_INJECTION, Class 2: JAILBREAK
     return 1.0 - probs[:, 0]
 
 
@@ -33,22 +31,34 @@ def find_operating_thresholds(
     y_true_binary: np.ndarray,
     malicious_scores: np.ndarray,
 ) -> Tuple[float, float]:
-    """
-    Finds operating thresholds:
-    1. tau_95: threshold achieving >= 95% TPR with minimal FPR
-    2. tau_1pct: threshold achieving <= 1% FPR with maximal TPR
-    """
     fpr, tpr, thresholds = roc_curve(y_true_binary, malicious_scores)
 
-    # 1. tau_95 (TPR >= 0.95)
-    tpr_idx = np.where(tpr >= 0.95)[0]
+    finite_mask = np.isfinite(thresholds)
+
+    tpr_idx = np.where((tpr >= 0.95) & finite_mask)[0]
     tau_95 = float(thresholds[tpr_idx[0]]) if len(tpr_idx) > 0 else 0.50
 
-    # 2. tau_1pct (FPR <= 0.01)
-    fpr_idx = np.where(fpr <= 0.01)[0]
+    fpr_idx = np.where((fpr <= 0.01) & finite_mask)[0]
     tau_1pct = float(thresholds[fpr_idx[-1]]) if len(fpr_idx) > 0 else 0.50
 
+    tau_95 = float(np.clip(tau_95, 1e-6, 1.0 - 1e-6))
+    tau_1pct = float(np.clip(tau_1pct, 1e-6, 1.0 - 1e-6))
     return tau_95, tau_1pct
+
+
+def macro_f1_from_probs(y_true: np.ndarray, probs: np.ndarray) -> float:
+    y_pred = np.argmax(probs, axis=-1) if probs.ndim > 1 else probs
+    return float(f1_score(y_true, y_pred, average="macro", zero_division=0))
+
+
+def tpr_at_1pct_fpr_from_probs(y_true: np.ndarray, probs: np.ndarray) -> float:
+    y_true_binary = (y_true > 0).astype(int)
+    s_mal = compute_binary_malicious_score(probs)
+    if len(np.unique(y_true_binary)) < 2:
+        return 0.0
+    _, tau_1pct = find_operating_thresholds(y_true_binary, s_mal)
+    pos_mask = y_true_binary == 1
+    return float(np.mean(s_mal[pos_mask] >= tau_1pct)) if np.sum(pos_mask) > 0 else 0.0
 
 
 def compute_expected_calibration_error(
@@ -56,7 +66,6 @@ def compute_expected_calibration_error(
     labels: np.ndarray,
     n_bins: int = 15,
 ) -> float:
-    """Computes Expected Calibration Error (ECE) with equal-width bins."""
     preds = np.argmax(probs, axis=-1)
     confidences = np.max(probs, axis=-1)
     accuracies = preds == labels
@@ -85,29 +94,22 @@ def compute_comprehensive_metrics(
     tau_95: Optional[float] = None,
     tau_1pct: Optional[float] = None,
 ) -> Dict[str, float]:
-    """
-    Computes all standard and security-specific metrics.
-    """
     y_pred = np.argmax(probs, axis=-1)
     y_true_binary = (y_true > 0).astype(int)
     s_mal = compute_binary_malicious_score(probs)
 
-    # Threshold-independent metrics
     roc_auc = float(roc_auc_score(y_true_binary, s_mal))
     precision_curve, recall_curve, _ = precision_recall_curve(y_true_binary, s_mal)
     pr_auc = float(auc(recall_curve, precision_curve))
 
-    # Standard multi-class
     acc = float(accuracy_score(y_true, y_pred))
-    macro_f1 = float(f1_score(y_true, y_pred, average="macro"))
-    weighted_f1 = float(f1_score(y_true, y_pred, average="weighted"))
+    macro_f1 = float(f1_score(y_true, y_pred, average="macro", zero_division=0))
+    weighted_f1 = float(f1_score(y_true, y_pred, average="weighted", zero_division=0))
 
-    # Per-class metrics (strictly enforce 3 classes: 0, 1, 2)
     p_per_class = precision_score(y_true, y_pred, labels=[0, 1, 2], average=None, zero_division=0)
     r_per_class = recall_score(y_true, y_pred, labels=[0, 1, 2], average=None, zero_division=0)
     f1_per_class = f1_score(y_true, y_pred, labels=[0, 1, 2], average=None, zero_division=0)
 
-    # Operational Security Metrics
     if tau_95 is None or tau_1pct is None:
         computed_tau_95, computed_tau_1pct = find_operating_thresholds(y_true_binary, s_mal)
         tau_95 = tau_95 if tau_95 is not None else computed_tau_95
@@ -116,9 +118,8 @@ def compute_comprehensive_metrics(
     preds_at_tau95 = (s_mal >= tau_95).astype(int)
     preds_at_tau1pct = (s_mal >= tau_1pct).astype(int)
 
-    # FPR @ 95% TPR
-    neg_mask = (y_true_binary == 0)
-    pos_mask = (y_true_binary == 1)
+    neg_mask = y_true_binary == 0
+    pos_mask = y_true_binary == 1
 
     fpr_at_tau95 = float(np.mean(preds_at_tau95[neg_mask])) if np.sum(neg_mask) > 0 else 0.0
     tpr_at_tau95 = float(np.mean(preds_at_tau95[pos_mask])) if np.sum(pos_mask) > 0 else 0.0
@@ -127,7 +128,7 @@ def compute_comprehensive_metrics(
     tpr_at_tau1pct = float(np.mean(preds_at_tau1pct[pos_mask])) if np.sum(pos_mask) > 0 else 0.0
 
     ece = compute_expected_calibration_error(probs, y_true)
-    brier = float(brier_score_loss(y_true_binary, s_mal))
+    brier = float(brier_score_loss(y_true_binary, np.clip(s_mal, 0.0, 1.0)))
 
     return {
         "accuracy": acc,
@@ -155,22 +156,74 @@ def compute_comprehensive_metrics(
     }
 
 
+def compute_quantization_drift(
+    fp32_logits: np.ndarray,
+    int8_logits: np.ndarray,
+    y_true: np.ndarray,
+    tau_95: float = 0.5,
+) -> Dict[str, float]:
+    fp32_arr = np.asarray(fp32_logits, dtype=np.float64)
+    int8_arr = np.asarray(int8_logits, dtype=np.float64)
+    y_true_arr = np.asarray(y_true)
+
+    abs_diff = np.abs(fp32_arr - int8_arr)
+    max_abs_diff = float(np.max(abs_diff))
+    mean_abs_diff = float(np.mean(abs_diff))
+
+    p_fp32 = _softmax_np(fp32_arr)
+    p_int8 = _softmax_np(int8_arr)
+
+    eps = 1e-12
+    kl_per_sample = np.sum(
+        p_fp32 * (np.log(np.clip(p_fp32, eps, 1.0)) - np.log(np.clip(p_int8, eps, 1.0))),
+        axis=-1,
+    )
+    kl_div_mean = float(np.mean(np.maximum(0.0, kl_per_sample)))
+
+    pred_fp32 = np.argmax(fp32_arr, axis=-1)
+    pred_int8 = np.argmax(int8_arr, axis=-1)
+    prediction_agreement = float(np.mean(pred_fp32 == pred_int8))
+
+    s_mal_fp32 = compute_binary_malicious_score(p_fp32)
+    s_mal_int8 = compute_binary_malicious_score(p_int8)
+    y_true_bin = (y_true_arr > 0).astype(int)
+    neg_mask = y_true_bin == 0
+
+    if np.sum(neg_mask) > 0:
+        fpr_fp32 = float(np.mean(s_mal_fp32[neg_mask] >= tau_95))
+        fpr_int8 = float(np.mean(s_mal_int8[neg_mask] >= tau_95))
+        delta_fpr = abs(fpr_int8 - fpr_fp32)
+    else:
+        delta_fpr = 0.0
+
+    if len(np.unique(y_true_bin)) >= 2:
+        p_curve_32, r_curve_32, _ = precision_recall_curve(y_true_bin, s_mal_fp32)
+        p_curve_8, r_curve_8, _ = precision_recall_curve(y_true_bin, s_mal_int8)
+        pr_auc_32 = float(auc(r_curve_32, p_curve_32))
+        pr_auc_8 = float(auc(r_curve_8, p_curve_8))
+        delta_pr_auc = abs(pr_auc_8 - pr_auc_32)
+    else:
+        delta_pr_auc = 0.0
+
+    return {
+        "max_abs_diff": max_abs_diff,
+        "mean_abs_diff": mean_abs_diff,
+        "kl_div_mean": kl_div_mean,
+        "prediction_agreement": prediction_agreement,
+        "delta_fpr_at_95_tpr": float(delta_fpr),
+        "delta_pr_auc": float(delta_pr_auc),
+    }
+
+
 def compute_mcnemar_test(
     y_true: np.ndarray,
     y_pred_a: np.ndarray,
     y_pred_b: np.ndarray,
 ) -> Tuple[float, float]:
-    """
-    Computes McNemar's test comparing model A vs model B.
-    H0: both models have equal error rates.
-    chi2 = (|b - c| - 1)^2 / (b + c) with Edwards' continuity correction.
-    """
-    correct_a = (y_pred_a == y_true)
-    correct_b = (y_pred_b == y_true)
+    correct_a = y_pred_a == y_true
+    correct_b = y_pred_b == y_true
 
-    # b: A correct, B incorrect
     b = int(np.sum(correct_a & ~correct_b))
-    # c: A incorrect, B correct
     c = int(np.sum(~correct_a & correct_b))
 
     if b + c == 0:
@@ -189,21 +242,17 @@ def compute_paired_bootstrap_ci(
     ci: float = 0.95,
     seed: int = 42,
 ) -> Tuple[float, float, float]:
-    """
-    Computes point estimate and empirical bootstrap confidence interval.
-    Returns: (point_estimate, lower_ci, upper_ci)
-    """
     rng = np.random.default_rng(seed)
     n_samples = len(y_true)
-    point_val = metric_fn(y_true, probs)
+    point_val = float(metric_fn(y_true, probs))
 
     boot_scores = []
     for _ in range(n_bootstraps):
         indices = rng.integers(0, n_samples, n_samples)
-        score = metric_fn(y_true[indices], probs[indices])
+        score = float(metric_fn(y_true[indices], probs[indices]))
         boot_scores.append(score)
 
     alpha = (1.0 - ci) / 2.0
     lower = float(np.percentile(boot_scores, 100.0 * alpha))
     upper = float(np.percentile(boot_scores, 100.0 * (1.0 - alpha)))
-    return float(point_val), lower, upper
+    return point_val, lower, upper

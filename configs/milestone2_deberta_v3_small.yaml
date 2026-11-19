@@ -1,92 +1,82 @@
-# AegisLLM - Milestone 2 Configuration (Single Source of Truth)
-# Software Engineering for Deep Learning - ETSIINF (UPM)
-# Authors: Evan Gendrot & Amaury Dubuc
-
 project:
   name: "aegis-llm"
   milestone: "milestone-2-model-implementation"
   default_seed: 42
-  multi_seeds: [42, 1337, 2026, 7, 99]
+  multi_seeds: [42, 1337, 2026]
 
-# Execution Profiles:
-# - t4_optimized: 36,000 samples, batch_size=16 (accum=2), FP32, DeBERTa-v3-base Teacher (22 mins on T4)
-# - high_compute_a100: 60,000 samples, DeBERTa-v3-large Teacher Distillation, FGM, Optuna, Model Soup
-active_profile: "t4_optimized"
+active_profile: "colab_pro_bf16"
 
 profiles:
-  t4_optimized:
-    target_size: 36000
+  colab_pro_bf16:
+    precision: "bf16"
+    tf32: true
+    torch_compile: false
+    auto_batch_scaling:
+      a100_min_vram_gb: 35.0
+      a100_batch_size: 64
+      a100_grad_accum: 1
+      l4_min_vram_gb: 18.0
+      l4_batch_size: 32
+      l4_grad_accum: 1
+      fallback_batch_size: 16
+      fallback_grad_accum: 2
     quotas:
-      benign: 18000
-      hard_negative_devops: 5400
-      benign_general: 12600
-      prompt_injection: 10800
-      direct_override: 6300
-      indirect_rag: 4500
-      jailbreak: 7200
-      jailbreak_persona: 4500
-      jailbreak_hypothetical: 2700
-    batch_size: 16
-    gradient_accumulation_steps: 2
-    precision: "fp32"
+      benign: 14000
+      prompt_injection: 9000
+      jailbreak: 5000
     teacher_distillation:
       enabled: true
       teacher_model: "microsoft/deberta-v3-base"
-      teacher_batch_size: 16
+      teacher_batch_size: 32
+      teacher_epochs: 3
       alpha_distill: 0.40
       temperature: 2.0
+      cache_dtype: "float16"
     adversarial_fgm:
       enabled: true
       epsilon: 0.50
       emb_names: ["word_embeddings"]
     model_soup:
       enabled: true
-      top_k_checkpoints: 3
-
-  high_compute_a100:
-    target_size: 60000
-    quotas:
-      benign: 30000
-      hard_negative_devops: 9000
-      benign_general: 21000
-      prompt_injection: 18000
-      direct_override: 10500
-      indirect_rag: 7500
-      jailbreak: 12000
-      jailbreak_persona: 7500
-      jailbreak_hypothetical: 4500
-    batch_size: 32
-    gradient_accumulation_steps: 1
-    precision: "bf16"
-    teacher_distillation:
-      enabled: true
-      teacher_model: "microsoft/deberta-v3-large"
-      teacher_batch_size: 16
-      alpha_distill: 0.40
-      temperature: 2.0
-      epochs: 3
-    adversarial_fgm:
-      enabled: true
-      epsilon: 0.50
-      emb_names: ["word_embeddings"]
-    optuna_study:
-      enabled: true
-      n_trials: 20
-      pruner: "MedianPruner"
-      metric: "val_tpr_at_1pct_fpr"
-    model_soup:
-      enabled: true
-      top_k_checkpoints: 3
+      strategy: "greedy"
+      max_candidates: 5
 
 dataset:
+  in_domain_sources:
+    neuralchemy:
+      dataset_id: "neuralchemy/Prompt-injection-dataset"
+      config: "full"
+      splits: ["train", "validation", "test"]
+    prompt_shield:
+      dataset_id: "hendzh/PromptShield"
+      config: "default"
+      splits: ["train", "validation"]
+      max_samples: 10000
+    safeguard:
+      dataset_id: "xTRam1/safe-guard-prompt-injection"
+      config: "default"
+      splits: ["train", "test"]
+    jackhhao_jailbreak:
+      dataset_id: "jackhhao/jailbreak-classification"
+      config: "default"
+      splits: ["train", "test"]
+    chatgpt_jailbreak:
+      dataset_id: "rubend18/ChatGPT-Jailbreak-Prompts"
+      config: "default"
+      splits: ["train"]
+    deepset:
+      dataset_id: "deepset/prompt-injections"
+      config: "default"
+      splits: ["train", "test"]
   splits:
     train_ratio: 0.70
     val_ratio: 0.15
     test_ratio: 0.15
+    n_folds: 20
   clustering:
     shingle_size: 5
     num_permutations: 128
-    lsh_threshold: 0.80
+    lsh_threshold: 0.75
   labels:
     0: "BENIGN"
     1: "PROMPT_INJECTION"
@@ -95,14 +85,17 @@ dataset:
 model:
   backbone: "microsoft/deberta-v3-small"
   num_labels: 3
-  max_sequence_length: 512
+  max_sequence_length: 256
+  extended_eval_length: 512
   pad_to_multiple_of: 8
 
 training:
-  precision: "fp32"
-  per_device_train_batch_size: 16
-  per_device_eval_batch_size: 32
-  gradient_accumulation_steps: 2
+  precision: "bf16"
+  tf32: true
+  torch_compile: false
+  per_device_train_batch_size: 32
+  per_device_eval_batch_size: 64
+  gradient_accumulation_steps: 1
   epochs: 4
   optimizer:
     name: "adamw_torch"
@@ -119,20 +112,24 @@ training:
     warmup_ratio: 0.10
   loss:
     name: "CostSensitiveAsymmetricFocalLoss"
-    class_weights: [1.0, 1.35, 1.65]
-    gammas: [2.5, 1.5, 1.5]
+    class_weights: [1.0, 1.35, 3.01]
+    gammas: [2.5, 1.5, 2.0]
     beta_fp: 2.25
     label_smoothing: 0.03
   evaluation:
     eval_strategy: "steps"
-    eval_steps: 175
+    eval_steps: 150
     metric_for_best_model: "eval_loss"
     greater_is_better: false
     early_stopping_patience: 3
 
+ablation:
+  loss_variants: ["ce", "focal", "cs_afl"]
+
 calibration:
   method: "temperature_scaling"
   max_iter: 50
+  recalibrate_post_quantization: true
 
 baselines:
   tier1:
@@ -152,14 +149,22 @@ baselines:
 ood_evaluation:
   xstest:
     dataset_id: "Paul/XSTest"
-    fallback_id: "allenai/xstest-response"
-    safe_samples: 250
-    unsafe_samples: 200
+    config: "default"
+    split: "train"
+  notinject:
+    dataset_id: "leolee99/NotInject"
+    config: "default"
+    splits: ["NotInject_one", "NotInject_two", "NotInject_three"]
   jailbreakbench:
     dataset_id: "JailbreakBench/JBB-Behaviors"
-    behaviors_samples: 200
+    behaviors_config: "behaviors"
+    judge_config: "judge_comparison"
 
-export:
+quantization:
   opset_version: 18
-  quantization: "INT8_DYNAMIC"
+  variants: ["fp32_opt", "int8_dynamic", "int8_static_qdq"]
+  calibration_samples: 512
+  calibration_method: "entropy"
+  op_types_to_quantize: ["MatMul", "Gemm"]
+  exclude_nodes_patterns: ["embeddings", "classifier", "LayerNorm"]
   sla_latency_p99_cpu_ms: 15.0
