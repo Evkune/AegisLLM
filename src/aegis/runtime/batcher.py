@@ -186,7 +186,7 @@ class AdaptiveMicroBatcher:
                     )
                     self._total_batches += 1
                     self._total_dispatched += len(bucket_items)
-                    for it, sc in zip(bucket_items, scores):
+                    for it, sc in zip(bucket_items, scores, strict=True):
                         wait_ms = (dispatch_ts - it.enqueued_at) * 1000.0
                         if not it.future.done():
                             it.future.set_result((sc, wait_ms))

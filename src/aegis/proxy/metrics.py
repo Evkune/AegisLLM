@@ -15,7 +15,7 @@ _STAGE_BUCKETS_MS = (0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 15.0, 25.0, 50.0, 100.
 
 def _read_rss_bytes() -> int:
     try:
-        with open("/proc/self/statm", "r", encoding="utf-8") as fh:
+        with open("/proc/self/statm", encoding="utf-8") as fh:
             fields = fh.read().split()
         rss_pages = int(fields[1])
         return rss_pages * os.sysconf("SC_PAGE_SIZE")

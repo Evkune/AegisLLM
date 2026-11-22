@@ -352,6 +352,12 @@ class AegisTeacherTrainer(Trainer):
         loss = self.loss_fn(logits, labels)
         return (loss, outputs) if return_outputs else loss
 
+def _make_training_args(**kwargs):
+    valid = set(inspect.signature(TrainingArguments.__init__).parameters)
+    if "eval_strategy" in kwargs and "eval_strategy" not in valid and "evaluation_strategy" in valid:
+        kwargs["evaluation_strategy"] = kwargs.pop("eval_strategy")
+    return TrainingArguments(**{k: v for k, v in kwargs.items() if k in valid})
+
 def _make_trainer_kwargs(tokenizer_obj):
     if "processing_class" in inspect.signature(Trainer.__init__).parameters:
         return {"processing_class": tokenizer_obj}
@@ -370,7 +376,7 @@ else:
     teacher_model = AutoModelForSequenceClassification.from_pretrained(TEACHER_MODEL_ID, num_labels=3)
     teacher_loss_fn = build_loss_fn("cs_afl", CFG, class_counts=TRAIN_CLASS_COUNTS)
 
-    teacher_args = TrainingArguments(
+    teacher_args = _make_training_args(
         output_dir="models/teacher_checkpoints",
         per_device_train_batch_size=TRAIN_BATCH_SIZE,
         gradient_accumulation_steps=GRAD_ACCUM_STEPS,
@@ -625,7 +631,7 @@ for loss_variant, run_seed, keep_ckpts in run_schedule:
 
     base_loss_fn = build_loss_fn(loss_variant, CFG, class_counts=TRAIN_CLASS_COUNTS)
 
-    t_args = TrainingArguments(
+    t_args = _make_training_args(
         output_dir=str(ckpt_dir),
         per_device_train_batch_size=TRAIN_BATCH_SIZE,
         gradient_accumulation_steps=GRAD_ACCUM_STEPS,
