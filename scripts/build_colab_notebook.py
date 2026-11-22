@@ -373,7 +373,7 @@ if LOCAL_TEACHER_LOGITS_PATH.exists():
     print(f"[OK] Loaded Teacher soft logits cache: shape={tuple(teacher_train_logits.shape)}, dtype={teacher_train_logits.dtype}")
 else:
     print(f"[*] Fine-tuning Teacher model {TEACHER_MODEL_ID} for {TEACHER_EPOCHS} epochs...")
-    teacher_model = AutoModelForSequenceClassification.from_pretrained(TEACHER_MODEL_ID, num_labels=3)
+    teacher_model = AutoModelForSequenceClassification.from_pretrained(TEACHER_MODEL_ID, num_labels=3).float()
     teacher_loss_fn = build_loss_fn("cs_afl", CFG, class_counts=TRAIN_CLASS_COUNTS)
 
     teacher_args = _make_training_args(
@@ -625,7 +625,7 @@ for loss_variant, run_seed, keep_ckpts in run_schedule:
     print(f"\\n=== Running Student Training: variant={loss_variant.upper()} | seed={run_seed} ===")
     seed_everything(run_seed)
 
-    student = AutoModelForSequenceClassification.from_pretrained(STUDENT_MODEL_ID, num_labels=3)
+    student = AutoModelForSequenceClassification.from_pretrained(STUDENT_MODEL_ID, num_labels=3).float()
     if ENABLE_TORCH_COMPILE and hasattr(torch, "compile"):
         student = torch.compile(student)
 
@@ -760,7 +760,7 @@ print(f"[*] Discovered {len(ckpt_dirs)} numerically sorted checkpoints: {[Path(p
 eval_loss_criterion = build_loss_fn("cs_afl", CFG, class_counts=TRAIN_CLASS_COUNTS)
 
 def make_eval_student():
-    return AutoModelForSequenceClassification.from_pretrained(STUDENT_MODEL_ID, num_labels=3)
+    return AutoModelForSequenceClassification.from_pretrained(STUDENT_MODEL_ID, num_labels=3).float()
 
 def score_student_on_val(candidate_model: torch.nn.Module) -> float:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
