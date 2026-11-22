@@ -1,30 +1,45 @@
-# Data Card (Consolidated Draft) — AegisLLM Golden Evaluation Corpus
+# Data Card — AegisLLM Zero-Leakage Evaluation & Training Corpus
 
-Following the data reporting framework proposed by Gebru et al. (2021) (*Datasheets for Datasets*).
+Following Gebru et al. (2021), *Datasheets for Datasets*. All statistics below are measured directly from `data/manifest.json` (`29,755` unique in-domain prompts and `1,289` strictly isolated OOD evaluation prompts).
 
 ## 1. Motivation & Provenance
-- **Purpose:** Provide a leakage-free, highly curated dataset for fine-tuning and evaluating low-latency security classifiers on OWASP LLM01 threats, with built-in controls against false refusals on benign technical queries.
-- **Academic Context:** Master of Science in Software Engineering, ETSIINF - Universidad Politécnica de Madrid (UPM) & INSA Rennes.
-- **Constituent Repositories on Hugging Face:**
-  - `neuralchemy/Prompt-injection-dataset` (Apache 2.0) — Core zero-leakage spine with `group_id` hashing and 3,500 DevOps hard negatives.
-  - `hendzh/PromptShield` (Apache 2.0) — Delimiter-structured full-context injections.
-  - `perplexity-ai/browsesafe-bench` (MIT) — Indirect HTML, CSS, and web DOM injection attacks.
-  - `xTRam1/safe-guard-prompt-injection` & `jackhhao/jailbreak-classification` — Persona-adoption jailbreaks vs benign creative roleplay.
-  - **Strictly Held-Out OOD Test Suites (Zero training overlap):** `Paul/XSTest` (NAACL 2024, CC-BY-4.0), `leolee99/NotInject` (MIT, 2025), and `JailbreakBench/JBB-Behaviors` (NeurIPS 2024, MIT).
+- **Purpose:** Provide a leakage-free, public, reproducible corpus for training and evaluating CPU-bound OWASP LLM01 classifiers (`BENIGN` / `PROMPT_INJECTION` / `JAILBREAK`), with explicit controls for trigger-word over-refusal and DevOps technical false positives.
+- **Academic Context:** Master in Software Engineering, ETSIINF — Universidad Politécnica de Madrid (UPM) & INSA Rennes (Software Engineering for Deep Learning, 103001022).
+- **Public In-Domain Sources (all non-gated Hugging Face datasets):**
+  - `hendzh/PromptShield` (`default`, capped 10,000 raw before dedup) — Long, structured prompt injections and benign contexts (`9,997` final deduplicated rows across splits).
+  - `xTRam1/safe-guard-prompt-injection` (`default`) — Conversational benign prompts and direct injections (`9,781` final rows).
+  - `neuralchemy/Prompt-injection-dataset` (`full`) — Core spine providing fine-grained sub-categories including `hard_negative_devops`, `hackaprompt`, `wildguard_judgecomp`, and `harmbench` (`8,480` final rows).
+  - `jackhhao/jailbreak-classification` (`default`) — Persona/adversarial jailbreaks and benign prompts (`768` final rows).
+  - `deepset/prompt-injections` (`default`) — Classic direct injections (`655` final rows).
+  - `rubend18/ChatGPT-Jailbreak-Prompts` (`default`) — Supplemental DAN/persona jailbreaks (`20` unique post-dedup rows).
+- **Strictly Isolated OOD Holdout Suites (zero training overlap, verified by automated pytest gate):**
+  - `Paul/XSTest` (`450` unique prompts: `250` safe exaggerations / homonyms, `200` unsafe).
+  - `leolee99/NotInject` (`339` unique benign prompts containing 1–3 injection trigger keywords).
+  - `JailbreakBench/JBB-Behaviors` (`500` unique prompts: `100` benign controls, `400` harmful jailbreak behaviors/attacks).
 
-## 2. Composition & Class Distribution
+## 2. Composition & Empirical Split Distribution
 
-The compiled corpus comprises **24,000 in-domain instances** and **1,089 isolated OOD evaluation instances**:
+After exact deduplication, label-conflict removal, and **602 cross-contamination purges** against the OOD holdouts via MinHash LSH (`Jaccard >= 0.75`), the remaining **29,755 unique prompts** are grouped into **23,712 structural clusters** and partitioned 70 / 15 / 15 via `StratifiedGroupKFold(n_splits=20)`:
 
-| Stratum / Class | Volume ($N=24,000$) | Ratio | Composition & Role |
-| :--- | :---: | :---: | :--- |
-| **Class 0: BENIGN** | **12,000** | **50.0%** | 8,400 conversational queries + **3,600 DevOps Hard Negatives** (`kill -9`, `bypass cache`, `override method`) to suppress keyword bias. |
-| **Class 1: PROMPT_INJECTION** | **7,200** | **30.0%** | 4,200 direct overrides & delimiter escapes + 3,000 indirect HTML/RAG injections. |
-| **Class 2: JAILBREAK** | **4,800** | **20.0%** | 2,800 persona-hijacking (DAN/developer mode) + 2,000 obfuscated (Base64/ROT13) payloads. |
-| **OOD Evaluation Suite** | **1,089** | — | `XSTest` (450 safe/unsafe pairs) + `NotInject` (339 trigger-word safe) + `JBB-Behaviors` (200 behaviors + 300 judge pairs). |
+| Partition | Rows | Unique Texts | Unique Clusters | Class 0: `BENIGN` | Class 1: `PROMPT_INJECTION` | Class 2: `JAILBREAK` | Median / P95 Char Len |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Train** | `20,878` | `20,878` | `16,374` | `11,358` (`54.4%`) | `8,268` (`39.6%`) | `1,252` (`6.0%`) | `131` / `1,483` |
+| **Validation** | `4,439` | `4,439` | `3,670` | `2,434` (`54.8%`) | `1,753` (`39.5%`) | `252` (`5.7%`) | `109` / `1,090` |
+| **Test** | `4,438` | `4,438` | `3,668` | `2,433` (`54.8%`) | `1,752` (`39.5%`) | `253` (`5.7%`) | `117` / `1,577` |
+| **Total In-Domain** | **`29,755`** | **`29,755`** | **`23,712`** | **`16,225` (`54.5%`)** | **`11,773` (`39.6%`)** | **`1,757` (`5.9%`)** | — |
 
-## 3. Preprocessing, Canonicalization & Hygiene Pipeline
-1. **Zero-Width Character Extraction:** Stripping `[\u200B-\u200D\u2060\uFEFF\u00AD\u180E\uFFF9-\uFFFB]` and all Unicode Format (Cf) code points while recording anomaly counters.
-2. **Unicode NFKC Normalization:** Canonical decomposition and composition mapping Cyrillic, Greek, and full-width homoglyphs into standard Latin characters.
-3. **Adversarial Character-Spacing Collapse:** Detecting and collapsing spaced word evasion patterns (`I g n o r e   a l l   p r e v i o u s`) to counter the Cisco PromptGuard bypass vulnerability.
-4. **Group-Aware Deduplication:** MinHash LSH ($0.85$ Jaccard similarity) ensuring no base prompt and its paraphrased or encoded variants cross between Train, Validation, and Test partitions.
+### OOD Holdout Suites (`1,289` prompts)
+| Suite | Rows | Unique Texts | Label Breakdown | Primary Diagnostic Metric |
+| :--- | :---: | :---: | :--- | :--- |
+| `data/ood/xstest.parquet` | `450` | `450` | `250` Safe (`0`), `200` Unsafe (`1`) | Safe Over-Refusal FPR & Unsafe TPR |
+| `data/ood/notinject.parquet` | `339` | `339` | `339` Benign (`0`) | Trigger-Word Lexical Bias FPR |
+| `data/ood/jbb.parquet` | `500` | `500` | `100` Benign (`0`), `400` Jailbreak (`2`) | Zero-Shot Jailbreak Recall (TPR) |
+
+## 3. Class Imbalance & Minority Class Mitigation
+Class 2 (`JAILBREAK`) represents **`6.0%`** (`1,252` rows) of the deduplicated training split. Rather than oversampling (which introduces near-duplicate leakage), training uses empirically balanced square-root inverse-frequency class weights computed by `compute_class_weights_from_counts(..., smoothing_power=0.5)` (`[1.0, 1.172, 3.012]`) inside the differentiable `CostSensitiveAsymmetricFocalLoss` (`CS-AFL`).
+
+## 4. Hygiene, Canonicalization & Zero-Leakage Verification
+1. **Shared Single-Source-of-Truth Normalization (`src/aegis/security/canonicalizer.py` & `src/aegis_dl/normalization.py`):** Plane-14 tag stripping, Bidi Trojan Source stripping, zero-width (`Cf`) extraction, NFKC folding, and targeted mixed-script UTR#39 confusable normalization.
+2. **MinHash LSH Structural Clustering:** 5-gram character shingles, 128 permutations, Jaccard threshold `0.75`, Union-Find (`DisjointSet`) connected-component grouping.
+3. **Automated Gate (`tests/test_zero_leakage.py`):** Enforces zero shared `group_id` across Train/Val/Test, zero exact text overlap, zero OOD contamination (`In-Domain ∩ OOD == ∅`), real OOD cardinality (`XSTest >= 400`, `NotInject >= 300`, `JBB >= 180`), and sequence length diversity (`P95 char_len >= 400`).
+4. **Integrity Manifest (`data/manifest.json`):** Stores SHA-256 checksums for every split and OOD parquet file.
