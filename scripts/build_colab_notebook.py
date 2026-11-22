@@ -579,8 +579,8 @@ class AegisSecurityTrainer(Trainer):
         self.accelerator.backward(0.5 * loss_clean / accum)
 
         self.fgm.attack()
-        self.fgm.restore_grad()
         # Add clean micro-batch gradient to any restored prior accumulation before adversarial backward
+        self.fgm.merge_backup_grad()
         loss_adv = self.compute_loss(model, inputs)
         self.accelerator.backward(0.5 * loss_adv / accum)
         self.fgm.restore()

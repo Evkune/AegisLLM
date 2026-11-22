@@ -1,23 +1,24 @@
-"""AegisLLM: AI Application Security Gateway for Prompt Injection & Jailbreak Defense."""
-
-from aegis.config import AegisConfig
-from aegis.engine import BaseInspectionEngine, BaselineEngine
+from aegis.config import AegisConfig, ProxySettings
+from aegis.engine import AegisPipeline, BaseInspectionEngine, BaselineEngine
 from aegis.types import (
     InspectionDecision,
     InspectionRequest,
     InspectionResult,
+    StageTimings,
     ThreatCategory,
     ThreatLevel,
 )
 
-__version__ = "0.1.0"
 __all__ = [
     "AegisConfig",
+    "AegisPipeline",
     "BaseInspectionEngine",
     "BaselineEngine",
     "InspectionDecision",
     "InspectionRequest",
     "InspectionResult",
+    "ProxySettings",
+    "StageTimings",
     "ThreatCategory",
     "ThreatLevel",
 ]

@@ -41,6 +41,17 @@ class FGMAdversarialPerturber:
                         param.grad.copy_(self.grad_backup[name])
         self.grad_backup.clear()
 
+    def merge_backup_grad(self) -> None:
+        """Adds previously accumulated micro-batch gradients back onto current gradients."""
+        with torch.no_grad():
+            for name, param in self.model.named_parameters():
+                if name in self.grad_backup:
+                    if param.grad is None:
+                        param.grad = self.grad_backup[name].clone()
+                    else:
+                        param.grad.add_(self.grad_backup[name])
+        self.grad_backup.clear()
+
     def attack(self) -> None:
         self.backup.clear()
         with torch.no_grad():
