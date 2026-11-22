@@ -42,9 +42,10 @@ _PURE_HEX_HASH_RE = re.compile(r"^[0-9a-fA-F]{32}$|^[0-9a-fA-F]{40}$|^[0-9a-fA-F
 _JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")
 
 _BASE64_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9+/_=-])([A-Za-z0-9+/_-]{16,1024}={0,2})(?![A-Za-z0-9+/_=-])")
+_BASE64_FULL_RE = re.compile(r"^[A-Za-z0-9+/_-]{16,1024}={0,2}$")
 _HEX_ESCAPE_SEQ_RE = re.compile(r"(?:\\x[0-9a-fA-F]{2}){8,}")
 _HEX_RAW_TOKEN_RE = re.compile(r"(?<![0-9a-fA-F])(?:0x)?([0-9a-fA-F]{20,1024})(?![0-9a-fA-F])")
-_URL_ENC_SEQ_RE = re.compile(r"(?:%[0-9a-fA-F]{2}){3,}")
+_URL_ENC_BYTE_RE = re.compile(r"%[0-9a-fA-F]{2}")
 _ROT13_HINT_RE = re.compile(r"\b(?:rot13|rot-13|caesar)\b", re.IGNORECASE)
 
 # Targeted UTR#39 Latin skeleton confusables (Cyrillic & Greek lookalikes)
@@ -444,8 +445,8 @@ class Canonicalizer:
             if len(views) >= (self.max_views - 1):
                 break
 
-            # C. URL percent-encoding (>= 3 %XX sequences)
-            if _URL_ENC_SEQ_RE.search(current):
+            # C. URL percent-encoding (>= 3 %XX escapes anywhere in payload)
+            if len(_URL_ENC_BYTE_RE.findall(current)) >= 3:
                 unquoted = unquote(current)
                 if unquoted != current and unquoted not in visited and len(unquoted) <= self.max_input_chars:
                     visited.add(unquoted)
@@ -463,7 +464,7 @@ class Canonicalizer:
 
         return views, anomalies
 
-    def _try_decode_base64(self, candidate: str) -> str | None:
+    def _raw_decode_base64(self, candidate: str) -> str | None:
         raw = candidate.strip()
         if len(raw) < 16:
             return None
@@ -483,10 +484,21 @@ class Canonicalizer:
         if len(decoded_bytes) > self.max_decoded_bytes:
             decoded_bytes = decoded_bytes[: self.max_decoded_bytes]
         try:
-            decoded_str = decoded_bytes.decode("utf-8").strip()
+            return decoded_bytes.decode("utf-8").strip()
         except UnicodeDecodeError:
             return None
-        # Require whitespace for unpadded/urlsafe tokens to avoid matching random API keys or slugs
+
+    def _try_decode_base64(self, candidate: str) -> str | None:
+        raw = candidate.strip()
+        decoded_str = self._raw_decode_base64(raw)
+        if decoded_str is None:
+            return None
+        is_urlsafe = ("-" in raw) or ("_" in raw)
+        # Support 2-layer nested Base64 (e.g. base64(base64(payload))) without FP on random keys
+        if _BASE64_FULL_RE.match(decoded_str) and not _PURE_HEX_HASH_RE.match(decoded_str):
+            inner = self._raw_decode_base64(decoded_str)
+            if inner is not None and _is_plausible_human_text(inner, require_space=True):
+                return inner
         require_space = is_urlsafe or (not raw.endswith("="))
         if not _is_plausible_human_text(decoded_str, require_space=require_space):
             return None
