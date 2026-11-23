@@ -1,0 +1,60 @@
+{
+  "architecture": "microsoft/deberta-v3-small",
+  "quantization_mode": "int8_dynamic",
+  "primary_onnx_file": "model_int8_dynamic.onnx",
+  "temperature": 0.6609298586845398,
+  "temperature_fp32": 0.6759023666381836,
+  "tau_95": 0.987907350063324,
+  "tau_1pct": 0.4449002146720886,
+  "max_length": 256,
+  "id2label": {
+    "0": "BENIGN",
+    "1": "PROMPT_INJECTION",
+    "2": "JAILBREAK"
+  },
+  "recommended_runtime": {
+    "provider": "CPUExecutionProvider",
+    "intra_op_num_threads": 8,
+    "inter_op_num_threads": 1,
+    "execution_mode": "ORT_SEQUENTIAL"
+  },
+  "quantization_duel": {
+    "int8_dynamic": {
+      "onnx_file": "model_int8_dynamic.onnx",
+      "size_mb": 434.94,
+      "temperature_int8": 0.6609298586845398,
+      "tau_95": 0.987907350063324,
+      "tau_1pct": 0.4449002146720886,
+      "macro_f1": 0.926330739435004,
+      "fpr_at_95_tpr": 0.002877106452938759,
+      "cpu_p99_latency_ms": 13.59,
+      "drift_vs_fp32": {
+        "max_abs_diff": 2.26888769865036,
+        "mean_abs_diff": 0.12678873308754707,
+        "kl_div_mean": 0.006415210817826826,
+        "prediction_agreement": 0.9876070301937809,
+        "delta_fpr_at_95_tpr": 0.0004110152075626798,
+        "delta_pr_auc": 0.00019520115513638192
+      }
+    },
+    "int8_static_qdq": {
+      "onnx_file": "model_int8_static_qdq.onnx",
+      "size_mb": 436.72,
+      "temperature_int8": 0.5082394480705261,
+      "tau_95": 0.9922446012496948,
+      "tau_1pct": 0.9254711270332336,
+      "macro_f1": 0.9061052306005976,
+      "fpr_at_95_tpr": 0.005343197698314837,
+      "cpu_p99_latency_ms": 16.54,
+      "drift_vs_fp32": {
+        "max_abs_diff": 3.832962915301323,
+        "mean_abs_diff": 0.4904644315943433,
+        "kl_div_mean": 0.057265777358924255,
+        "prediction_agreement": 0.959215863001352,
+        "delta_fpr_at_95_tpr": 0.0008220304151253596,
+        "delta_pr_auc": 0.001041854424358446
+      }
+    }
+  },
+  "git_sha": "colab-t4-final"
+}

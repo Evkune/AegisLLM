@@ -1,0 +1,41 @@
+{
+  "name": "Candidate: DeBERTa-v3-Small (ONNX INT8 Dynamic, Recalibrated)",
+  "model_key": "deberta_v3_small_int8_dynamic",
+  "params": "44.1M (INT8)",
+  "p99_latency_ms": 13.59,
+  "temperature": 0.6609298586845398,
+  "tau_95": 0.987907350063324,
+  "tau_1pct": 0.4449002146720886,
+  "quantization_drift": {
+    "max_abs_diff": 2.26888769865036,
+    "mean_abs_diff": 0.12678873308754707,
+    "kl_div_mean": 0.006415210817826826,
+    "prediction_agreement": 0.9876070301937809,
+    "delta_fpr_at_95_tpr": 0.0004110152075626798,
+    "delta_pr_auc": 0.00019520115513638192
+  },
+  "metrics": {
+    "accuracy": 0.9659756647138351,
+    "macro_f1": 0.926330739435004,
+    "weighted_f1": 0.9663636592548093,
+    "precision_benign": 0.9868421052631579,
+    "recall_benign": 0.9864364981504316,
+    "f1_benign": 0.986639260020555,
+    "precision_injection": 0.9646376811594203,
+    "recall_injection": 0.9497716894977168,
+    "f1_injection": 0.9571469657750935,
+    "precision_jailbreak": 0.7935943060498221,
+    "recall_jailbreak": 0.8814229249011858,
+    "f1_jailbreak": 0.8352059925093633,
+    "roc_auc": 0.9988106183370181,
+    "pr_auc": 0.9986358172028407,
+    "tau_95": 0.987907350063324,
+    "tau_1pct": 0.4449002146720886,
+    "fpr_at_95_tpr": 0.002877106452938759,
+    "tpr_at_95_tpr": 0.9486284289276808,
+    "fpr_at_1pct_fpr": 0.015618577887381833,
+    "tpr_at_1pct_fpr": 0.9855361596009975,
+    "ece": 0.00741916133402277,
+    "brier_score": 0.011276993331045634
+  }
+}

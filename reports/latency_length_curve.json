@@ -1,0 +1,73 @@
+{
+  "backend": "onnx:int8_dynamic",
+  "onnx_loaded": true,
+  "rss_mb": 731.9,
+  "sse_streaming_verified": true,
+  "sse_chunks": 4,
+  "prometheus_metrics_verified": true,
+  "length_curve": [
+    {
+      "target_tokens": 32,
+      "actual_tokens": 32,
+      "windows_inspected": 1,
+      "p50_ms": 13.79,
+      "p95_ms": 15.86,
+      "p99_ms": 15.89,
+      "buried_attack_blocked": null
+    },
+    {
+      "target_tokens": 64,
+      "actual_tokens": 64,
+      "windows_inspected": 1,
+      "p50_ms": 22.93,
+      "p95_ms": 29.89,
+      "p99_ms": 30.43,
+      "buried_attack_blocked": null
+    },
+    {
+      "target_tokens": 128,
+      "actual_tokens": 129,
+      "windows_inspected": 1,
+      "p50_ms": 43.03,
+      "p95_ms": 51.31,
+      "p99_ms": 51.34,
+      "buried_attack_blocked": null
+    },
+    {
+      "target_tokens": 256,
+      "actual_tokens": 256,
+      "windows_inspected": 2,
+      "p50_ms": 78.76,
+      "p95_ms": 99.74,
+      "p99_ms": 99.9,
+      "buried_attack_blocked": null
+    },
+    {
+      "target_tokens": 512,
+      "actual_tokens": 256,
+      "windows_inspected": 2,
+      "p50_ms": 68.48,
+      "p95_ms": 75.97,
+      "p99_ms": 78.62,
+      "buried_attack_blocked": true
+    },
+    {
+      "target_tokens": 1024,
+      "actual_tokens": 256,
+      "windows_inspected": 2,
+      "p50_ms": 82.15,
+      "p95_ms": 100.34,
+      "p99_ms": 112.56,
+      "buried_attack_blocked": true
+    },
+    {
+      "target_tokens": 4096,
+      "actual_tokens": 256,
+      "windows_inspected": 2,
+      "p50_ms": 118.24,
+      "p95_ms": 125.87,
+      "p99_ms": 127.76,
+      "buried_attack_blocked": true
+    }
+  ]
+}

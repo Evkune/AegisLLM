@@ -1,0 +1,41 @@
+{
+  "name": "Challenger: DeBERTa-v3-Small (ONNX INT8 Static QDQ, Recalibrated)",
+  "model_key": "deberta_v3_small_int8_static_qdq",
+  "params": "44.1M (INT8)",
+  "p99_latency_ms": 16.54,
+  "temperature": 0.5082394480705261,
+  "tau_95": 0.9922446012496948,
+  "tau_1pct": 0.9254711270332336,
+  "quantization_drift": {
+    "max_abs_diff": 3.832962915301323,
+    "mean_abs_diff": 0.4904644315943433,
+    "kl_div_mean": 0.057265777358924255,
+    "prediction_agreement": 0.959215863001352,
+    "delta_fpr_at_95_tpr": 0.0008220304151253596,
+    "delta_pr_auc": 0.001041854424358446
+  },
+  "metrics": {
+    "accuracy": 0.9524560612888688,
+    "macro_f1": 0.9061052306005976,
+    "weighted_f1": 0.9533259045713697,
+    "precision_benign": 0.9932059447983015,
+    "recall_benign": 0.9613645704891081,
+    "f1_benign": 0.9770258980785297,
+    "precision_injection": 0.9314763231197771,
+    "recall_injection": 0.954337899543379,
+    "f1_injection": 0.942768536791655,
+    "precision_jailbreak": 0.75,
+    "recall_jailbreak": 0.8537549407114624,
+    "f1_jailbreak": 0.7985212569316081,
+    "roc_auc": 0.9981705210873351,
+    "pr_auc": 0.9978724704667798,
+    "tau_95": 0.9922446012496948,
+    "tau_1pct": 0.9254711270332336,
+    "fpr_at_95_tpr": 0.005343197698314837,
+    "tpr_at_95_tpr": 0.9491271820448878,
+    "fpr_at_1pct_fpr": 0.013563501849568433,
+    "tpr_at_1pct_fpr": 0.9785536159600997,
+    "ece": 0.008852668156920405,
+    "brier_score": 0.020292386451066045
+  }
+}

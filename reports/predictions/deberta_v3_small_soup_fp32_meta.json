@@ -1,0 +1,35 @@
+{
+  "name": "Candidate: DeBERTa-v3-Small (CS-AFL + FGM + Greedy Soup FP32)",
+  "model_key": "deberta_v3_small_soup_fp32",
+  "params": "44.1M",
+  "temperature": 0.6759023666381836,
+  "tau_95": 0.9875919222831726,
+  "tau_1pct": 0.2138960361480713,
+  "retained_checkpoints": [
+    "checkpoint-1564"
+  ],
+  "metrics": {
+    "accuracy": 0.9722848129788193,
+    "macro_f1": 0.9344024723950505,
+    "weighted_f1": 0.9726334145236809,
+    "precision_benign": 0.9877551020408163,
+    "recall_benign": 0.9946568023016852,
+    "f1_benign": 0.9911939381527749,
+    "precision_injection": 0.9782991202346041,
+    "recall_injection": 0.952054794520548,
+    "f1_injection": 0.9649985536592421,
+    "precision_jailbreak": 0.8021201413427562,
+    "recall_jailbreak": 0.8972332015810277,
+    "f1_jailbreak": 0.8470149253731343,
+    "roc_auc": 0.9990209433260252,
+    "pr_auc": 0.9988422946593671,
+    "tau_95": 0.9875919222831726,
+    "tau_1pct": 0.2138960361480713,
+    "fpr_at_95_tpr": 0.002466091245376079,
+    "tpr_at_95_tpr": 0.942643391521197,
+    "fpr_at_1pct_fpr": 0.013563501849568433,
+    "tpr_at_1pct_fpr": 0.9900249376558603,
+    "ece": 0.008793355001421246,
+    "brier_score": 0.0086947405424657
+  }
+}

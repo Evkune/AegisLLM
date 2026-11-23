@@ -37,6 +37,7 @@ htmlcov/
 *.pth
 *.ckpt
 *.joblib
+models/*/tokenizer.json
 checkpoints/
 models_cache/
 data/
