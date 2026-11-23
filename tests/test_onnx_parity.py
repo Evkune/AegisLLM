@@ -5,13 +5,12 @@ from pathlib import Path
 import numpy as np
 import onnx
 import onnxruntime as ort
-from onnxruntime.quantization import QuantType, quantize_dynamic
 import pytest
 import torch
 import torch.nn as nn
+from onnxruntime.quantization import QuantType, quantize_dynamic
 
 from aegis_dl.metrics import compute_quantization_drift
-
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROD_MODEL_DIR = REPO_ROOT / "models" / "deberta_v3_small_aegis_v1"
@@ -162,7 +161,7 @@ def test_production_deberta_v3_small_int8_artifact_integration() -> None:
 
     meta_path = PROD_MODEL_DIR / "model_metadata.json"
     if meta_path.exists():
-        with open(meta_path, "r", encoding="utf-8") as f:
+        with open(meta_path, encoding="utf-8") as f:
             meta = json.load(f)
         assert meta.get("quantization_mode") == "int8_dynamic"
         assert float(meta.get("temperature", 0.0)) > 0.0

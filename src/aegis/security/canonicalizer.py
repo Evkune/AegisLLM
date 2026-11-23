@@ -38,8 +38,15 @@ _MULTI_NEWLINE_RE = re.compile(r"\n{3,}")
 _UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
+_UUID_INLINE_RE = re.compile(
+    r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+)
 _PURE_HEX_HASH_RE = re.compile(r"^[0-9a-fA-F]{32}$|^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$|^[0-9a-fA-F]{128}$")
+_PURE_HEX_INLINE_RE = re.compile(
+    r"\b(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{64}|[0-9a-fA-F]{128})\b"
+)
 _JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")
+_INLINE_BACKTICK_RE = re.compile(r"(?<!`)`([^`\n]{1,120})`(?!`)")
 
 _BASE64_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9+/_=-])([A-Za-z0-9+/_-]{16,1024}={0,2})(?![A-Za-z0-9+/_=-])")
 _BASE64_FULL_RE = re.compile(r"^[A-Za-z0-9+/_-]{16,1024}={0,2}$")
@@ -152,6 +159,7 @@ class CanonicalResult:
     raw_text: str
     canonical_text: str
     views: list[str] = field(default_factory=list)
+    neural_views: list[str] = field(default_factory=list)
     anomalies: list[str] = field(default_factory=list)
     hard_block_anomalies: list[str] = field(default_factory=list)
     latency_ms: float = 0.0
@@ -267,6 +275,26 @@ def _is_valid_jwt(token: str) -> bool:
     return decoded.startswith("{") and ('"alg"' in decoded or '"typ"' in decoded)
 
 
+def _extract_suspicious_jwt_claims(token: str, max_bytes: int = 2048) -> list[str]:
+    """Extracts natural-language string claims (>= 4 words) from a JWT payload to catch claim smuggling."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        return []
+    body_b64 = parts[1]
+    pad = "=" * ((4 - len(body_b64) % 4) % 4)
+    try:
+        raw_bytes = base64.urlsafe_b64decode(body_b64 + pad)[:max_bytes]
+        decoded = raw_bytes.decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return []
+    suspicious: list[str] = []
+    for m in re.finditer(r'"([^"\\]{16,})"', decoded):
+        val = m.group(1).strip()
+        if len(val.split()) >= 4 and _is_plausible_human_text(val, require_space=True):
+            suspicious.append(val)
+    return suspicious
+
+
 class Canonicalizer:
     """
     Single Source of Truth pre-tokenization canonicalizer shared between
@@ -363,16 +391,38 @@ class Canonicalizer:
         # Preserve unique anomalies in insertion order
         dedup_anomalies = list(dict.fromkeys(anomalies))
         dedup_hard = list(dict.fromkeys(hard_block))
+        neural_views = [self._prepare_neural_view(v) for v in views]
 
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         return CanonicalResult(
             raw_text=bounded,
             canonical_text=normalized,
             views=views,
+            neural_views=neural_views,
             anomalies=dedup_anomalies,
             hard_block_anomalies=dedup_hard,
             latency_ms=round(elapsed_ms, 4),
         )
+
+    def _prepare_neural_view(self, text: str) -> str:
+        """
+        Replaces benign high-entropy structured cryptographic identifiers (valid JWTs,
+        UUIDs, non-ASCII hex digests) and single inline code backticks with clean prose
+        tokens so SentencePiece subword fragmentation does not trigger false positives.
+        """
+        masked = _JWT_RE.sub(
+            lambda m: "jwt token" if _is_valid_jwt(m.group(0)) else m.group(0),
+            text,
+        )
+        masked = _UUID_INLINE_RE.sub("uuid value", masked)
+        masked = _PURE_HEX_INLINE_RE.sub(
+            lambda m: "hex checksum"
+            if self._try_decode_hex(m.group(0), require_space=True) is None
+            else m.group(0),
+            masked,
+        )
+        masked = _INLINE_BACKTICK_RE.sub(r"\1", masked)
+        return masked
 
     def _extract_decoded_views(self, text: str) -> tuple[list[str], list[str]]:
         views: list[str] = []
@@ -385,10 +435,17 @@ class Canonicalizer:
             if depth >= self.max_decode_depth:
                 continue
 
-            # Mask valid JWTs so Base64URL scan never raises false positives on bearer tokens
-            jwt_spans: list[tuple[int, int]] = [
-                m.span() for m in _JWT_RE.finditer(current) if _is_valid_jwt(m.group(0))
-            ]
+            # Mask valid JWTs so Base64URL scan never raises false positives on bearer tokens,
+            # while still inspecting natural-language JWT claims for payload smuggling.
+            jwt_spans: list[tuple[int, int]] = []
+            for m in _JWT_RE.finditer(current):
+                if _is_valid_jwt(m.group(0)):
+                    jwt_spans.append(m.span())
+                    for claim_text in _extract_suspicious_jwt_claims(m.group(0), self.max_decoded_bytes):
+                        if claim_text not in visited and len(views) < (self.max_views - 1):
+                            visited.add(claim_text)
+                            anomalies.append("anomaly:jwt_claim_payload")
+                            views.append(claim_text)
 
             def _inside_jwt(
                 start: int,

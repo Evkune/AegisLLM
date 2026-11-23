@@ -277,7 +277,7 @@ class AegisPipeline:
                 )
 
             plan = self.window_builder.build(
-                views=canon.views,
+                views=canon.neural_views or canon.views,
                 hotspot_spans=pre.hotspot_spans,
                 source_role=seg.role,
             )
