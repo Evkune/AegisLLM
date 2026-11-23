@@ -77,7 +77,7 @@ def _softmax_calibrated(logits: np.ndarray, temperature: float) -> np.ndarray:
     scaled = logits.astype(np.float32) / t
     shifted = scaled - np.max(scaled, axis=-1, keepdims=True)
     exp = np.exp(shifted)
-    return exp / np.sum(exp, axis=-1, keepdims=True)
+    return np.asarray(exp / np.sum(exp, axis=-1, keepdims=True))
 
 
 class OnnxSecurityEngine:
