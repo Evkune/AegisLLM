@@ -48,3 +48,6 @@ datasets/
 .env
 .env.*
 !.env.example
+
+# Private interview preparation dossier (never push to public repo)
+AEGISLLM_PFE_INTERVIEW_DOSSIER.md

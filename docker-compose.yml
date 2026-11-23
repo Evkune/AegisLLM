@@ -39,7 +39,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          # Real ONNX INT8 RSS stabilizes at ~693-698 MB (393.5 MB unpruned 128k FP32 vocab + 41 MB INT8 backbone + ORT arena)
+          memory: 1024M
 
   prometheus:
     image: prom/prometheus:v2.54.1

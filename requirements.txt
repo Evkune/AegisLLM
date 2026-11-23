@@ -1,12 +1,10 @@
-# Core runtime dependencies
+# Zero-PyTorch production runtime dependencies (mirrors pyproject.toml [runtime])
 pydantic>=2.0.0
-
-# Development & test dependencies
-pytest>=7.4.0
-
-# Optional dependencies for Phase 2 & Phase 3 (Proxy & ONNX Engine)
-# fastapi>=0.100.0
-# uvicorn>=0.22.0
-# httpx>=0.24.0
-# onnxruntime>=1.16.0
-# tokenizers>=0.15.0
+numpy>=1.26.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+orjson>=3.10.0
+httpx>=0.27.0
+prometheus-client>=0.20.0
+onnxruntime>=1.18.0
+tokenizers>=0.19.0
