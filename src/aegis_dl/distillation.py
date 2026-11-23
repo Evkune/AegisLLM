@@ -1,6 +1,7 @@
-from pathlib import Path
 import re
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
+from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -11,14 +12,14 @@ class FGMAdversarialPerturber:
     def __init__(
         self,
         model: nn.Module,
-        emb_names: Optional[List[str]] = None,
+        emb_names: list[str] | None = None,
         epsilon: float = 0.5,
     ) -> None:
         self.model = model
         self.emb_names = emb_names or ["word_embeddings"]
         self.epsilon = float(epsilon)
-        self.backup: Dict[str, torch.Tensor] = {}
-        self.grad_backup: Dict[str, torch.Tensor] = {}
+        self.backup: dict[str, torch.Tensor] = {}
+        self.grad_backup: dict[str, torch.Tensor] = {}
 
     def _iter_target_embeddings(self):
         for name, param in self.model.named_parameters():
@@ -90,7 +91,7 @@ class HybridDistillationCSAFL(nn.Module):
         self,
         student_logits: torch.Tensor,
         targets: torch.Tensor,
-        teacher_logits: Optional[torch.Tensor] = None,
+        teacher_logits: torch.Tensor | None = None,
     ) -> torch.Tensor:
         hard_loss = self.cs_afl(student_logits, targets)
         if teacher_logits is None or self.alpha <= 0.0:
@@ -112,7 +113,7 @@ def build_llrd_optimizer_params(
     head_lr: float = 1.0e-4,
     llrd_decay: float = 0.90,
     weight_decay: float = 0.01,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     layer_pattern = re.compile(r"(?:encoder\.layer|layers)\.(\d+)\.")
     no_decay_tokens = ("bias", "layernorm", "layer_norm", "norm")
     head_tokens = ("classifier", "pooler", "score", "head")
@@ -125,7 +126,7 @@ def build_llrd_optimizer_params(
             max_layer_idx = max(max_layer_idx, int(match.group(1)))
     num_layers = max_layer_idx + 1 if max_layer_idx >= 0 else 6
 
-    grouped: Dict[Tuple[float, float], List[nn.Parameter]] = {}
+    grouped: dict[tuple[float, float], list[nn.Parameter]] = {}
 
     for name, param in model.named_parameters():
         if not param.requires_grad:
@@ -156,8 +157,8 @@ def build_llrd_optimizer_params(
     ]
 
 
-def sort_checkpoints_numerically(checkpoint_paths: Sequence[str]) -> List[str]:
-    def _extract_step(path_str: str) -> Tuple[int, str]:
+def sort_checkpoints_numerically(checkpoint_paths: Sequence[str]) -> list[str]:
+    def _extract_step(path_str: str) -> tuple[int, str]:
         name = Path(path_str).name
         matches = re.findall(r"(\d+)", name)
         step = int(matches[-1]) if matches else -1
@@ -167,12 +168,12 @@ def sort_checkpoints_numerically(checkpoint_paths: Sequence[str]) -> List[str]:
 
 
 def average_checkpoints_model_soup(
-    checkpoint_state_dicts: List[Dict[str, torch.Tensor]],
-) -> Dict[str, torch.Tensor]:
+    checkpoint_state_dicts: list[dict[str, torch.Tensor]],
+) -> dict[str, torch.Tensor]:
     if not checkpoint_state_dicts:
         raise ValueError("Cannot compute model soup over an empty list of checkpoints.")
 
-    soup_state: Dict[str, torch.Tensor] = {}
+    soup_state: dict[str, torch.Tensor] = {}
     k = len(checkpoint_state_dicts)
     first_dict = checkpoint_state_dicts[0]
 
@@ -189,8 +190,8 @@ def average_checkpoints_model_soup(
 
 def _load_checkpoint_state_dict(
     ckpt_path: str,
-    model_factory: Optional[Callable[[], nn.Module]] = None,
-) -> Dict[str, torch.Tensor]:
+    model_factory: Callable[[], nn.Module] | None = None,
+) -> dict[str, torch.Tensor]:
     p = Path(ckpt_path)
     if p.is_file():
         payload = torch.load(p, map_location="cpu", weights_only=True)
@@ -222,17 +223,17 @@ def _load_checkpoint_state_dict(
 
 
 def greedy_model_soup(
-    checkpoint_paths: List[str],
+    checkpoint_paths: list[str],
     eval_fn: Callable[[nn.Module], float],
     model_factory: Callable[[], nn.Module],
     higher_is_better: bool = False,
-) -> Tuple[Dict[str, torch.Tensor], List[str], float]:
+) -> tuple[dict[str, torch.Tensor], list[str], float]:
     if not checkpoint_paths:
         raise ValueError("checkpoint_paths must not be empty.")
 
     ordered_paths = sort_checkpoints_numerically(checkpoint_paths)
-    loaded_sds: Dict[str, Dict[str, torch.Tensor]] = {}
-    individual_scores: List[Tuple[float, str]] = []
+    loaded_sds: dict[str, dict[str, torch.Tensor]] = {}
+    individual_scores: list[tuple[float, str]] = []
 
     eval_model = model_factory()
     for path in ordered_paths:
@@ -246,8 +247,8 @@ def greedy_model_soup(
     individual_scores.sort(key=lambda item: item[0], reverse=higher_is_better)
 
     best_score, best_first_path = individual_scores[0]
-    retained_paths: List[str] = [best_first_path]
-    retained_sds: List[Dict[str, torch.Tensor]] = [loaded_sds[best_first_path]]
+    retained_paths: list[str] = [best_first_path]
+    retained_sds: list[dict[str, torch.Tensor]] = [loaded_sds[best_first_path]]
 
     for _, candidate_path in individual_scores[1:]:
         trial_sds = retained_sds + [loaded_sds[candidate_path]]

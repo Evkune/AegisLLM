@@ -2,12 +2,12 @@
 import argparse
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -31,11 +31,11 @@ def _resolve_git_sha(repo_root: Path) -> str:
             text=True,
         )
         return out.strip()
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return "unknown"
 
 
-def _discover_prediction_artifacts(preds_dir: Path) -> List[Dict[str, Any]]:
+def _discover_prediction_artifacts(preds_dir: Path) -> list[dict[str, Any]]:
     if not preds_dir.exists():
         return []
 
@@ -43,13 +43,13 @@ def _discover_prediction_artifacts(preds_dir: Path) -> List[Dict[str, Any]]:
     if not npz_files:
         npz_files = sorted(preds_dir.glob("*.npz"))
 
-    discovered: List[Dict[str, Any]] = []
+    discovered: list[dict[str, Any]] = []
     for npz_path in npz_files:
         stem = npz_path.name[:-9] if npz_path.name.endswith("_test.npz") else npz_path.stem
         meta_path = preds_dir / f"{stem}_meta.json"
-        meta: Dict[str, Any] = {}
+        meta: dict[str, Any] = {}
         if meta_path.exists():
-            with open(meta_path, "r", encoding="utf-8") as f:
+            with open(meta_path, encoding="utf-8") as f:
                 meta = json.load(f)
 
         discovered.append(
@@ -67,7 +67,7 @@ def _discover_prediction_artifacts(preds_dir: Path) -> List[Dict[str, Any]]:
     return discovered
 
 
-def format_table_markdown(records: List[Dict[str, Any]]) -> str:
+def format_table_markdown(records: list[dict[str, Any]]) -> str:
     headers = [
         "Model / Variant",
         "Params",
@@ -105,7 +105,7 @@ def format_table_markdown(records: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def format_table_latex(records: List[Dict[str, Any]]) -> str:
+def format_table_latex(records: list[dict[str, Any]]) -> str:
     tex = [
         r"\begin{table*}[t]",
         r"\centering",
@@ -138,14 +138,14 @@ def format_table_latex(records: List[Dict[str, Any]]) -> str:
 
 
 def _evaluate_single_artifact(
-    artifact: Dict[str, Any],
+    artifact: dict[str, Any],
     test_df: pd.DataFrame,
-    xstest_df: Optional[pd.DataFrame],
-    notinject_df: Optional[pd.DataFrame],
-    jbb_df: Optional[pd.DataFrame],
-    baseline_preds: Optional[np.ndarray],
+    xstest_df: pd.DataFrame | None,
+    notinject_df: pd.DataFrame | None,
+    jbb_df: pd.DataFrame | None,
+    baseline_preds: np.ndarray | None,
     n_bootstraps: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     npz = np.load(artifact["npz_path"])
     meta = artifact["meta"]
     meta_metrics = meta.get("metrics", {})
@@ -191,13 +191,13 @@ def _evaluate_single_artifact(
         if np.sum(~safe_mask) > 0:
             xstest_unsafe_tpr = float(np.mean(x_s_mal[~safe_mask] >= tau_95_eff))
 
-    notinject_fpr: Optional[float] = meta_metrics.get("notinject_fpr")
+    notinject_fpr: float | None = meta_metrics.get("notinject_fpr")
     if "notinject_probs" in npz and notinject_df is not None:
         ni_s_mal = compute_binary_malicious_score(npz["notinject_probs"])
         notinject_fpr = float(np.mean(ni_s_mal >= tau_95_eff))
 
-    jbb_harmful_tpr: Optional[float] = meta_metrics.get("jbb_harmful_tpr")
-    jbb_benign_fpr: Optional[float] = meta_metrics.get("jbb_benign_fpr")
+    jbb_harmful_tpr: float | None = meta_metrics.get("jbb_harmful_tpr")
+    jbb_benign_fpr: float | None = meta_metrics.get("jbb_benign_fpr")
     if "jbb_probs" in npz and jbb_df is not None:
         jbb_s_mal = compute_binary_malicious_score(npz["jbb_probs"])
         harm_mask = jbb_df["label"].values > 0
@@ -254,9 +254,9 @@ def _evaluate_single_artifact(
     }
 
 
-def _aggregate_multi_seed_runs(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _aggregate_multi_seed_runs(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seed_pattern = re.compile(r"^(.*)_seed(\d+)$")
-    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    grouped: dict[str, list[dict[str, Any]]] = {}
 
     for rec in records:
         g_key = rec.get("group_key")
@@ -267,7 +267,7 @@ def _aggregate_multi_seed_runs(records: List[Dict[str, Any]]) -> List[Dict[str, 
         if g_key:
             grouped.setdefault(g_key, []).append(rec)
 
-    aggregates: List[Dict[str, Any]] = []
+    aggregates: list[dict[str, Any]] = []
     metric_keys = (
         "macro_f1",
         "pr_auc",
@@ -288,7 +288,7 @@ def _aggregate_multi_seed_runs(records: List[Dict[str, Any]]) -> List[Dict[str, 
     for g_key, group_recs in grouped.items():
         if len(group_recs) < 2:
             continue
-        agg: Dict[str, Any] = {
+        agg: dict[str, Any] = {
             "group_key": g_key,
             "num_seeds": len(group_recs),
             "seeds": [r.get("seed") or r["model_key"] for r in group_recs],
@@ -338,14 +338,14 @@ def main() -> None:
     for art in artifacts:
         print(f"    - {art['model_key']} ({art['name']})")
 
-    baseline_preds: Optional[np.ndarray] = None
+    baseline_preds: np.ndarray | None = None
     for art in artifacts:
         if art["model_key"] == "baseline_tier1":
             base_npz = np.load(art["npz_path"])
             baseline_preds = np.argmax(base_npz["probs"], axis=-1)
             break
 
-    records: List[Dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
     for art in artifacts:
         rec = _evaluate_single_artifact(
             artifact=art,

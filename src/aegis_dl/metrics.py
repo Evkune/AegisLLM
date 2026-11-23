@@ -1,4 +1,3 @@
-from typing import Dict, Optional, Tuple
 
 import numpy as np
 from scipy import stats
@@ -30,7 +29,7 @@ def compute_binary_malicious_score(probs: np.ndarray) -> np.ndarray:
 def find_operating_thresholds(
     y_true_binary: np.ndarray,
     malicious_scores: np.ndarray,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     fpr, tpr, thresholds = roc_curve(y_true_binary, malicious_scores)
 
     finite_mask = np.isfinite(thresholds)
@@ -91,9 +90,9 @@ def compute_expected_calibration_error(
 def compute_comprehensive_metrics(
     y_true: np.ndarray,
     probs: np.ndarray,
-    tau_95: Optional[float] = None,
-    tau_1pct: Optional[float] = None,
-) -> Dict[str, float]:
+    tau_95: float | None = None,
+    tau_1pct: float | None = None,
+) -> dict[str, float]:
     y_pred = np.argmax(probs, axis=-1)
     y_true_binary = (y_true > 0).astype(int)
     s_mal = compute_binary_malicious_score(probs)
@@ -161,7 +160,7 @@ def compute_quantization_drift(
     int8_logits: np.ndarray,
     y_true: np.ndarray,
     tau_95: float = 0.5,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     fp32_arr = np.asarray(fp32_logits, dtype=np.float64)
     int8_arr = np.asarray(int8_logits, dtype=np.float64)
     y_true_arr = np.asarray(y_true)
@@ -219,7 +218,7 @@ def compute_mcnemar_test(
     y_true: np.ndarray,
     y_pred_a: np.ndarray,
     y_pred_b: np.ndarray,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     correct_a = y_pred_a == y_true
     correct_b = y_pred_b == y_true
 
@@ -241,7 +240,7 @@ def compute_paired_bootstrap_ci(
     n_bootstraps: int = 1000,
     ci: float = 0.95,
     seed: int = 42,
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     rng = np.random.default_rng(seed)
     n_samples = len(y_true)
     point_val = float(metric_fn(y_true, probs))

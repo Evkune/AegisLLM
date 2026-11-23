@@ -29,13 +29,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT / "src"))
-
 import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import onnx
@@ -83,6 +77,10 @@ from aegis_dl.metrics import (
     compute_quantization_drift,
     find_operating_thresholds,
 )
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+matplotlib.use("Agg")
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def seed_everything(seed: int = 42) -> None:
@@ -144,14 +142,15 @@ def predict_logits(
     dataset: Dataset,
     collator: Any,
     batch_size: int = 64,
-    device: torch.device = torch.device("cuda"),
+    device: torch.device | None = None,
 ) -> np.ndarray:
+    target_device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collator, num_workers=2, pin_memory=True)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collator, num_workers=0, pin_memory=True)
     outs = []
     for batch in loader:
         mi = {
-            k: v.to(device, non_blocking=True)
+            k: v.to(target_device, non_blocking=True)
             for k, v in batch.items()
             if k in ("input_ids", "attention_mask", "token_type_ids")
         }
@@ -225,7 +224,7 @@ def train_teacher_stage1(cfg: dict[str, Any], data: dict[str, Any], tokenizer: A
     hf_train_no_idx = data["hf_train"].remove_columns(["sample_idx"])
     collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
     sampler = LengthBucketedBatchSampler(data["train_lengths"], batch_size=batch_size, seed=42)
-    train_loader = DataLoader(hf_train_no_idx, batch_sampler=sampler, collate_fn=collator, num_workers=2, pin_memory=True)
+    train_loader = DataLoader(hf_train_no_idx, batch_sampler=sampler, collate_fn=collator, num_workers=0, pin_memory=True)
 
     model = AutoModelForSequenceClassification.from_pretrained(teacher_id, num_labels=3).float().to(device)
     assert next(model.parameters()).dtype == torch.float32
@@ -365,8 +364,10 @@ def run_student_training(
     keep_ckpts: bool,
     epochs: int,
     device: torch.device,
+    no_distill: bool = False,
 ) -> torch.nn.Module | None:
-    run_key = f"deberta_v3_small_{loss_variant}_seed{run_seed}"
+    variant_tag = f"{loss_variant}_no_distill" if no_distill else loss_variant
+    run_key = f"deberta_v3_small_{variant_tag}_seed{run_seed}"
     preds_dir = REPO_ROOT / "reports/predictions"
     preds_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir = REPO_ROOT / "models/checkpoints_cs_afl_seed42"
@@ -377,7 +378,7 @@ def run_student_training(
 
     student_id = cfg["model"]["backbone"]
     prof_cfg = cfg["profiles"][cfg["active_profile"]]
-    alpha_distill = float(prof_cfg["teacher_distillation"].get("alpha_distill", 0.40))
+    alpha_distill = 0.0 if no_distill else float(prof_cfg["teacher_distillation"].get("alpha_distill", 0.40))
     distill_temp = float(prof_cfg["teacher_distillation"].get("temperature", 2.0))
     fgm_eps = float(prof_cfg["adversarial_fgm"].get("epsilon", 0.50))
 
@@ -395,7 +396,7 @@ def run_student_training(
     distill_collator = DistillDataCollator(tokenizer, teacher_logits, pad_to_multiple_of=8)
     eval_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
     sampler = LengthBucketedBatchSampler(data["train_lengths"], batch_size=batch_size, seed=run_seed)
-    train_loader = DataLoader(data["hf_train"], batch_sampler=sampler, collate_fn=distill_collator, num_workers=2, pin_memory=True)
+    train_loader = DataLoader(data["hf_train"], batch_sampler=sampler, collate_fn=distill_collator, num_workers=0, pin_memory=True)
 
     param_groups = build_llrd_optimizer_params(
         model,
@@ -448,7 +449,7 @@ def run_student_training(
                 optimizer.zero_grad(set_to_none=True)
                 global_step += 1
 
-                if global_step % 200 == 0:
+                if global_step % 50 == 0 or global_step == 10:
                     print(
                         f"[STAGE2] {run_key} ep={ep}/{epochs} step={global_step}/{total_steps} "
                         f"loss={running_loss/max(1,log_n):.4f} gnorm={gnorm:.2f} elapsed={(time.time()-t_run)/60:.1f}m",
@@ -518,13 +519,15 @@ def run_student_training(
         notinject_probs=ni_probs,
         jbb_probs=jbb_probs,
     )
+    pretty_variant = f"{loss_variant.upper()}, No Distill" if no_distill else loss_variant.upper()
     (preds_dir / f"{run_key}_meta.json").write_text(
         json.dumps(
             {
-                "name": f"DeBERTa-v3-Small ({loss_variant.upper()}, seed={run_seed})",
+                "name": f"DeBERTa-v3-Small ({pretty_variant}, seed={run_seed})",
                 "model_key": run_key,
-                "group_key": f"deberta_v3_small_{loss_variant}",
+                "group_key": f"deberta_v3_small_{variant_tag}",
                 "loss_variant": loss_variant,
+                "distillation_enabled": not no_distill,
                 "seed": run_seed,
                 "params": "44.1M",
                 "temperature": opt_t,
@@ -970,6 +973,17 @@ def generate_final_reports_and_figures(data: dict[str, Any]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", type=int, choices=[1, 2], required=True)
+    parser.add_argument(
+        "--only-run",
+        type=str,
+        default=None,
+        help="Optional single Phase-2 run spec '<loss_variant>:<seed>' (e.g. cs_afl:1337).",
+    )
+    parser.add_argument(
+        "--reports-only",
+        action="store_true",
+        help="In Phase 2, skip student training and only regenerate OOD reports and 300 DPI figures.",
+    )
     args = parser.parse_args()
 
     t0 = time.time()
@@ -988,12 +1002,42 @@ def main() -> None:
         run_soup_and_onnx_export(cfg, data, tokenizer, primary_model, device)
         print(f"[ALL_PHASE1_COMPLETE] Elapsed: {(time.time()-t0)/60:.1f} min", flush=True)
     else:
-        teacher_logits = torch.load(REPO_ROOT / "models/teacher_train_logits.pt", map_location="cpu", weights_only=True)
-        for loss_variant, seed in [("cs_afl", 1337), ("cs_afl", 2026), ("ce", 42), ("focal", 42)]:
-            run_student_training(
-                cfg, data, tokenizer, teacher_logits, loss_variant=loss_variant, run_seed=seed, keep_ckpts=False, epochs=3, device=device
-            )
-        generate_final_reports_and_figures(data)
+        if not args.reports_only:
+            teacher_logits = torch.load(REPO_ROOT / "models/teacher_train_logits.pt", map_location="cpu", weights_only=True)
+            runs: list[tuple[str, int, bool]] = [
+                ("ce", 42, False),
+                ("focal", 42, False),
+                ("cs_afl", 1337, False),
+                ("cs_afl", 2026, False),
+                ("cs_afl", 42, True),
+            ]
+            if args.only_run:
+                lv, sd = args.only_run.split(":", 1)
+                lv_clean = lv.strip()
+                no_dist = lv_clean.endswith("_no_distill")
+                base_lv = lv_clean[: -len("_no_distill")] if no_dist else lv_clean
+                runs = [(base_lv, int(sd.strip()), no_dist)]
+            preds_dir = REPO_ROOT / "reports/predictions"
+            for loss_variant, seed, no_dist in runs:
+                tag = f"{loss_variant}_no_distill" if no_dist else loss_variant
+                run_key = f"deberta_v3_small_{tag}_seed{seed}"
+                if (preds_dir / f"{run_key}_test.npz").exists() and (preds_dir / f"{run_key}_meta.json").exists():
+                    print(f"[STAGE2] Skipping already completed run: {run_key}", flush=True)
+                    continue
+                run_student_training(
+                    cfg,
+                    data,
+                    tokenizer,
+                    teacher_logits,
+                    loss_variant=loss_variant,
+                    run_seed=seed,
+                    keep_ckpts=False,
+                    epochs=3,
+                    device=device,
+                    no_distill=no_dist,
+                )
+        if not args.only_run:
+            generate_final_reports_and_figures(data)
         print(f"[ALL_PHASE2_COMPLETE] Elapsed: {(time.time()-t0)/60:.1f} min", flush=True)
 
 

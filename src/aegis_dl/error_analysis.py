@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -10,7 +9,7 @@ def extract_top_failures(
     y_true: np.ndarray,
     probs: np.ndarray,
     k: int = 20,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     preds = np.argmax(probs, axis=-1)
     s_mal = 1.0 - probs[:, 0]
     confidences = np.max(probs, axis=-1)
@@ -45,7 +44,7 @@ def analyze_length_correlation(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     token_lengths: np.ndarray,
-) -> Dict:
+) -> dict:
     errors = (y_true != y_pred).astype(int)
     if len(np.unique(errors)) < 2 or len(np.unique(token_lengths)) < 2:
         r_pb, p_val = 0.0, 1.0
@@ -56,7 +55,7 @@ def analyze_length_correlation(
     bin_labels = ["1-32", "33-128", "129-256", "257-512", ">512"]
     assigned_bins = pd.cut(token_lengths, bins=bins, labels=bin_labels)
 
-    breakdown: List[Dict] = []
+    breakdown: list[dict] = []
     for label in bin_labels:
         mask = assigned_bins == label
         count = int(np.sum(mask))
@@ -94,7 +93,7 @@ def analyze_subcategory_performance(
     df: pd.DataFrame,
     y_true: np.ndarray,
     y_pred: np.ndarray,
-    probs: Optional[np.ndarray] = None,
+    probs: np.ndarray | None = None,
 ) -> pd.DataFrame:
     y_true_arr = np.asarray(y_true)
     y_pred_in = np.asarray(y_pred)

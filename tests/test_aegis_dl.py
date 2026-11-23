@@ -9,14 +9,11 @@ import torch.nn as nn
 
 from aegis_dl.distillation import (
     FGMAdversarialPerturber,
-    HybridDistillationCSAFL,
-    average_checkpoints_model_soup,
     build_llrd_optimizer_params,
     greedy_model_soup,
     sort_checkpoints_numerically,
 )
 from aegis_dl.error_analysis import (
-    analyze_length_correlation,
     analyze_subcategory_performance,
     extract_top_failures,
 )
@@ -28,9 +25,6 @@ from aegis_dl.losses import (
     compute_class_weights_from_counts,
 )
 from aegis_dl.metrics import (
-    compute_comprehensive_metrics,
-    compute_mcnemar_test,
-    compute_paired_bootstrap_ci,
     compute_quantization_drift,
     macro_f1_from_probs,
     tpr_at_1pct_fpr_from_probs,
@@ -222,7 +216,7 @@ def test_greedy_model_soup_numerical_sort_and_monotonic_improvement(tmp_path: Pa
     sd_350 = {"weight": target_weight + torch.tensor([[-0.2, 0.2], [-0.2, 0.2]])}
     sd_1050 = {"weight": target_weight + torch.tensor([[5.0, 5.0], [5.0, 5.0]])}
 
-    for p, sd in zip(sorted_paths, [sd_175, sd_350, sd_1050]):
+    for p, sd in zip(sorted_paths, [sd_175, sd_350, sd_1050], strict=True):
         d = Path(p)
         d.mkdir(parents=True, exist_ok=True)
         torch.save(sd, d / "state_dict.pt")

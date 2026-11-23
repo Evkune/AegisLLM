@@ -1,18 +1,18 @@
-from typing import Any, Dict, Literal, Mapping, Optional, Sequence, Tuple, Union
+from collections.abc import Mapping, Sequence
+from typing import Any, Literal
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-DEFAULT_EMPIRICAL_CLASS_COUNTS: Tuple[int, int, int] = (11358, 8268, 1252)
+DEFAULT_EMPIRICAL_CLASS_COUNTS: tuple[int, int, int] = (11358, 8268, 1252)
 
 
 def compute_class_weights_from_counts(
-    class_counts: Union[Sequence[int], Mapping[int, int]],
+    class_counts: Sequence[int] | Mapping[int, int],
     smoothing_power: float = 0.5,
     max_weight: float = 4.0,
-) -> Tuple[float, ...]:
+) -> tuple[float, ...]:
     if isinstance(class_counts, Mapping):
         ordered = [int(class_counts[idx]) for idx in sorted(class_counts.keys())]
     else:
@@ -134,8 +134,8 @@ class CostSensitiveAsymmetricFocalLoss(nn.Module):
 
 def build_loss_fn(
     variant: Literal["ce", "focal", "cs_afl"],
-    cfg: Optional[Dict[str, Any]] = None,
-    class_counts: Optional[Union[Sequence[int], Mapping[int, int]]] = None,
+    cfg: dict[str, Any] | None = None,
+    class_counts: Sequence[int] | Mapping[int, int] | None = None,
 ) -> nn.Module:
     loss_cfg = ((cfg or {}).get("training") or {}).get("loss") or (cfg or {})
 

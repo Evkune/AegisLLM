@@ -7,7 +7,6 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -18,7 +17,6 @@ from sklearn.model_selection import StratifiedGroupKFold
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 from aegis_dl.normalization import extract_structural_skeleton, normalize_text
-
 
 DEVOPS_TRIGGER_RE = re.compile(
     r"\b(?:kill|sudo|chmod|chown|rm\s+-rf|drop\s+table|truncate|select\s+.+from|"
@@ -81,9 +79,9 @@ def _classify_benign_subcat(text: str, raw_cat: str = "", raw_source: str = "") 
     return "benign_general"
 
 
-def load_real_ood_suites(ood_dir: Path) -> Dict[str, pd.DataFrame]:
+def load_real_ood_suites(ood_dir: Path) -> dict[str, pd.DataFrame]:
     ood_dir.mkdir(parents=True, exist_ok=True)
-    suites: Dict[str, pd.DataFrame] = {}
+    suites: dict[str, pd.DataFrame] = {}
 
     print("[*] Downloading real OOD holdout suite: Paul/XSTest...")
     xs_ds = load_dataset("Paul/XSTest", "default", split="train")
@@ -164,8 +162,8 @@ def load_real_ood_suites(ood_dir: Path) -> Dict[str, pd.DataFrame]:
     return suites
 
 
-def load_and_harmonize_in_domain(cfg: Dict, seed: int = 42) -> pd.DataFrame:
-    records: List[Dict] = []
+def load_and_harmonize_in_domain(cfg: dict, seed: int = 42) -> pd.DataFrame:
+    records: list[dict] = []
 
     print("[*] Ingesting neuralchemy/Prompt-injection-dataset (full)...")
     for sp in ("train", "validation", "test"):
@@ -321,7 +319,7 @@ def load_and_harmonize_in_domain(cfg: Dict, seed: int = 42) -> pd.DataFrame:
 
 def deduplicate_and_cluster_minhash(
     df: pd.DataFrame,
-    ood_texts: List[str],
+    ood_texts: list[str],
     shingle_size: int = 5,
     num_perm: int = 128,
     lsh_threshold: float = 0.75,
@@ -352,7 +350,7 @@ def deduplicate_and_cluster_minhash(
     keep_mask = np.ones(len(df), dtype=bool)
     purged_exact = 0
     purged_lsh = 0
-    in_domain_minhashes: List[MinHash] = []
+    in_domain_minhashes: list[MinHash] = []
 
     for i, row in enumerate(df.itertuples(index=False)):
         mh = compute_5gram_minhash(row.skeleton, shingle_size, num_perm)
@@ -369,16 +367,16 @@ def deduplicate_and_cluster_minhash(
             f"[*] OOD Cross-Contamination Purge: removed {purged_exact} exact and {purged_lsh} near-duplicate (Jaccard>={lsh_threshold}) prompts."
         )
     df = df[keep_mask].reset_index(drop=True)
-    kept_minhashes = [mh for mh, k in zip(in_domain_minhashes, keep_mask) if k]
+    kept_minhashes = [mh for mh, k in zip(in_domain_minhashes, keep_mask, strict=True) if k]
 
     n = len(df)
     dsu = DisjointSet(n)
     lsh = MinHashLSH(threshold=lsh_threshold, num_perm=num_perm)
 
-    skel_to_first_idx: Dict[str, int] = {}
-    raw_gid_to_first_idx: Dict[str, int] = {}
+    skel_to_first_idx: dict[str, int] = {}
+    raw_gid_to_first_idx: dict[str, int] = {}
 
-    for i, (row, mh) in enumerate(zip(df.itertuples(index=False), kept_minhashes)):
+    for i, (row, mh) in enumerate(zip(df.itertuples(index=False), kept_minhashes, strict=True)):
         if row.raw_group_id:
             if row.raw_group_id in raw_gid_to_first_idx:
                 dsu.union(i, raw_gid_to_first_idx[row.raw_group_id])
@@ -413,7 +411,7 @@ def partition_and_save_splits(
     output_dir: Path,
     n_splits: int = 20,
     seed: int = 42,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     df = df.copy()
     sgkf = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=seed)
     fold_assignments = np.zeros(len(df), dtype=int)
@@ -468,13 +466,13 @@ def _file_sha256(path: Path) -> str:
 
 
 def write_dataset_manifest(
-    splits: Dict[str, pd.DataFrame],
-    ood: Dict[str, pd.DataFrame],
+    splits: dict[str, pd.DataFrame],
+    ood: dict[str, pd.DataFrame],
     processed_dir: Path,
     ood_dir: Path,
     out_path: Path,
 ) -> None:
-    manifest: Dict = {
+    manifest: dict = {
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "in_domain_splits": {},
         "ood_suites": {},
@@ -518,7 +516,7 @@ def main() -> None:
     parser.add_argument("--config", type=str, default=str(default_config))
     args = parser.parse_args()
 
-    with open(args.config, "r", encoding="utf-8") as f:
+    with open(args.config, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     seed = int(cfg.get("project", {}).get("default_seed", 42))
@@ -531,7 +529,7 @@ def main() -> None:
     ood_dir = repo_root / "data" / "ood"
 
     ood_suites = load_real_ood_suites(ood_dir)
-    all_ood_texts: List[str] = []
+    all_ood_texts: list[str] = []
     for ood_df in ood_suites.values():
         all_ood_texts.extend(ood_df["text"].tolist())
 

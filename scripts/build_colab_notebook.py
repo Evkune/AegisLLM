@@ -15,10 +15,10 @@ Implements the complete P0.7 specification:
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
-def _md_cell(lines: List[str]) -> Dict[str, Any]:
+def _md_cell(lines: list[str]) -> dict[str, Any]:
     return {
         "cell_type": "markdown",
         "metadata": {},
@@ -26,7 +26,7 @@ def _md_cell(lines: List[str]) -> Dict[str, Any]:
     }
 
 
-def _code_cell(code_str: str) -> Dict[str, Any]:
+def _code_cell(code_str: str) -> dict[str, Any]:
     lines = code_str.strip("\n").split("\n")
     return {
         "cell_type": "code",
@@ -38,7 +38,7 @@ def _code_cell(code_str: str) -> Dict[str, Any]:
 
 
 def create_notebook() -> None:
-    cells: List[Dict[str, Any]] = []
+    cells: list[dict[str, Any]] = []
 
     cells.append(
         _md_cell(
