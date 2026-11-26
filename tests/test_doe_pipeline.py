@@ -173,4 +173,6 @@ def test_full_20_run_anova_pipeline_and_report_injection(tmp_path: Path) -> None
     assert "### 3.1 Raw Experimental Data" in updated_md
     assert "### 3.4 Two-Way ANOVA Tables" in updated_md
     assert "### 3.6 Statistical Tool Options & Verification Screenshots" in updated_md
-    assert "[PLACEHOLDER — SCREENSHOT 1" in updated_md
+    assert "01_anova_model_options.png" in updated_md
+    assert "02_assumption_checks_options.png" in updated_md
+    assert "03_plots_options.png" in updated_md

@@ -1,0 +1,129 @@
+{
+  "order_seed": 2026,
+  "randomized": true,
+  "epochs": 2,
+  "fgm_enabled": false,
+  "preds_dir": "/content/AegisLLM/reports/predictions_doe_fast",
+  "full_order": [
+    {
+      "loss": "ce",
+      "distillation": "on",
+      "seed": 42,
+      "run_key": "deberta_v3_small_ce_seed42"
+    },
+    {
+      "loss": "ce",
+      "distillation": "off",
+      "seed": 2026,
+      "run_key": "deberta_v3_small_ce_no_distill_seed2026"
+    },
+    {
+      "loss": "ce",
+      "distillation": "off",
+      "seed": 42,
+      "run_key": "deberta_v3_small_ce_no_distill_seed42"
+    },
+    {
+      "loss": "ce",
+      "distillation": "off",
+      "seed": 1337,
+      "run_key": "deberta_v3_small_ce_no_distill_seed1337"
+    },
+    {
+      "loss": "cs_afl",
+      "distillation": "off",
+      "seed": 777,
+      "run_key": "deberta_v3_small_cs_afl_no_distill_seed777"
+    },
+    {
+      "loss": "ce",
+      "distillation": "off",
+      "seed": 999,
+      "run_key": "deberta_v3_small_ce_no_distill_seed999"
+    },
+    {
+      "loss": "cs_afl",
+      "distillation": "off",
+      "seed": 1337,
+      "run_key": "deberta_v3_small_cs_afl_no_distill_seed1337"
+    },
+    {
+      "loss": "ce",
+      "distillation": "on",
+      "seed": 2026,
+      "run_key": "deberta_v3_small_ce_seed2026"
+    },
+    {
+      "loss": "cs_afl",
+      "distillation": "on",
+      "seed": 777,
+      "run_key": "deberta_v3_small_cs_afl_seed777"
+    },
+    {
+      "loss": "ce",
+      "distillation": "on",
+      "seed": 1337,
+      "run_key": "deberta_v3_small_ce_seed1337"
+    },
+    {
+      "loss": "ce",
+      "distillation": "on",
+      "seed": 777,
+      "run_key": "deberta_v3_small_ce_seed777"
+    },
+    {
+      "loss": "cs_afl",
+      "distillation": "off",
+      "seed": 2026,
+      "run_key": "deberta_v3_small_cs_afl_no_distill_seed2026"
+    },
+    {
+      "loss": "ce",
+      "distillation": "on",
+      "seed": 999,
+      "run_key": "deberta_v3_small_ce_seed999"
+    },
+    {
+      "loss": "cs_afl",
+      "distillation": "on",
+      "seed": 42,
+      "run_key": "deberta_v3_small_cs_afl_seed42"
+    },
+    {
+      "loss": "cs_afl",
+      "distillation": "off",
+      "seed": 999,
+      "run_key": "deberta_v3_small_cs_afl_no_distill_seed999"
+    },
+    {
+      "loss": "cs_afl",
+      "distillation": "on",
+      "seed": 999,
+      "run_key": "deberta_v3_small_cs_afl_seed999"
+    },
+    {
+      "loss": "cs_afl",
+      "distillation": "on",
+      "seed": 2026,
+      "run_key": "deberta_v3_small_cs_afl_seed2026"
+    },
+    {
+      "loss": "cs_afl",
+      "distillation": "on",
+      "seed": 1337,
+      "run_key": "deberta_v3_small_cs_afl_seed1337"
+    },
+    {
+      "loss": "cs_afl",
+      "distillation": "off",
+      "seed": 42,
+      "run_key": "deberta_v3_small_cs_afl_no_distill_seed42"
+    },
+    {
+      "loss": "ce",
+      "distillation": "off",
+      "seed": 777,
+      "run_key": "deberta_v3_small_ce_no_distill_seed777"
+    }
+  ]
+}
