@@ -358,18 +358,20 @@ def run_student_training(
     cfg: dict[str, Any],
     data: dict[str, Any],
     tokenizer: Any,
-    teacher_logits: torch.Tensor,
+    teacher_logits: torch.Tensor | None,
     loss_variant: str,
     run_seed: int,
     keep_ckpts: bool,
     epochs: int,
     device: torch.device,
     no_distill: bool = False,
+    enable_fgm: bool = True,
+    preds_dir: Path | None = None,
 ) -> torch.nn.Module | None:
     variant_tag = f"{loss_variant}_no_distill" if no_distill else loss_variant
     run_key = f"deberta_v3_small_{variant_tag}_seed{run_seed}"
-    preds_dir = REPO_ROOT / "reports/predictions"
-    preds_dir.mkdir(parents=True, exist_ok=True)
+    out_preds_dir = preds_dir if preds_dir is not None else (REPO_ROOT / "reports/predictions")
+    out_preds_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir = REPO_ROOT / "models/checkpoints_cs_afl_seed42"
     if keep_ckpts:
         if ckpt_dir.exists():
@@ -380,20 +382,31 @@ def run_student_training(
     prof_cfg = cfg["profiles"][cfg["active_profile"]]
     alpha_distill = 0.0 if no_distill else float(prof_cfg["teacher_distillation"].get("alpha_distill", 0.40))
     distill_temp = float(prof_cfg["teacher_distillation"].get("temperature", 2.0))
-    fgm_eps = float(prof_cfg["adversarial_fgm"].get("epsilon", 0.50))
+    fgm_eps = float(prof_cfg["adversarial_fgm"].get("epsilon", 0.50)) if enable_fgm else 0.0
+    if not no_distill and teacher_logits is None:
+        raise ValueError(f"teacher_logits is required when distillation is enabled for {run_key}")
+    effective_teacher_logits = (
+        teacher_logits
+        if teacher_logits is not None
+        else torch.zeros((len(data["train_df"]), 3), dtype=torch.float16)
+    )
 
-    print(f"\n[STAGE2] === Student {run_key} ({epochs} ep, FGM={fgm_eps}, distill_a={alpha_distill}) ===", flush=True)
+    print(
+        f"\n[STAGE2] === Student {run_key} ({epochs} ep, FGM={fgm_eps if enable_fgm else 'OFF'}, "
+        f"distill_a={alpha_distill}) ===",
+        flush=True,
+    )
     seed_everything(run_seed)
     model = AutoModelForSequenceClassification.from_pretrained(student_id, num_labels=3).float().to(device)
     assert next(model.parameters()).dtype == torch.float32
 
     base_loss_fn = build_loss_fn(loss_variant, cfg, class_counts=data["class_counts"])
     hybrid_loss_fn = HybridDistillationCSAFL(cs_afl_loss=base_loss_fn, alpha_distill=alpha_distill, temperature=distill_temp)
-    fgm = FGMAdversarialPerturber(model, emb_names=["word_embeddings"], epsilon=fgm_eps)
+    fgm = FGMAdversarialPerturber(model, emb_names=["word_embeddings"], epsilon=fgm_eps) if enable_fgm else None
 
     batch_size = 16
     grad_accum = 2
-    distill_collator = DistillDataCollator(tokenizer, teacher_logits, pad_to_multiple_of=8)
+    distill_collator = DistillDataCollator(tokenizer, effective_teacher_logits, pad_to_multiple_of=8)
     eval_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
     sampler = LengthBucketedBatchSampler(data["train_lengths"], batch_size=batch_size, seed=run_seed)
     train_loader = DataLoader(data["hf_train"], batch_sampler=sampler, collate_fn=distill_collator, num_workers=0, pin_memory=True)
@@ -425,21 +438,26 @@ def run_student_training(
 
         for step, batch in enumerate(train_loader, start=1):
             labels = batch["labels"].to(device, non_blocking=True)
-            t_logits = batch["teacher_logits"].to(device, non_blocking=True)
+            t_logits = batch["teacher_logits"].to(device, non_blocking=True) if not no_distill else None
             mi = {k: v.to(device, non_blocking=True) for k, v in batch.items() if k in ("input_ids", "attention_mask", "token_type_ids")}
 
-            fgm.backup_grad()
-            model.zero_grad(set_to_none=False)
-            loss_clean = hybrid_loss_fn(model(**mi).logits, labels, teacher_logits=t_logits)
-            (0.5 * loss_clean / grad_accum).backward()
+            if fgm is not None:
+                fgm.backup_grad()
+                model.zero_grad(set_to_none=False)
+                loss_clean = hybrid_loss_fn(model(**mi).logits, labels, teacher_logits=t_logits)
+                (0.5 * loss_clean / grad_accum).backward()
 
-            fgm.attack()
-            fgm.merge_backup_grad()
-            loss_adv = hybrid_loss_fn(model(**mi).logits, labels, teacher_logits=t_logits)
-            (0.5 * loss_adv / grad_accum).backward()
-            fgm.restore()
+                fgm.attack()
+                fgm.merge_backup_grad()
+                loss_adv = hybrid_loss_fn(model(**mi).logits, labels, teacher_logits=t_logits)
+                (0.5 * loss_adv / grad_accum).backward()
+                fgm.restore()
 
-            running_loss += 0.5 * (float(loss_clean.item()) + float(loss_adv.item()))
+                running_loss += 0.5 * (float(loss_clean.item()) + float(loss_adv.item()))
+            else:
+                loss_clean = hybrid_loss_fn(model(**mi).logits, labels, teacher_logits=t_logits)
+                (loss_clean / grad_accum).backward()
+                running_loss += float(loss_clean.item())
             log_n += 1
 
             if step % grad_accum == 0 or step == len(train_loader):
@@ -508,8 +526,9 @@ def run_student_training(
         flush=True,
     )
 
+    train_duration_sec = round(time.time() - t_run, 2)
     np.savez_compressed(
-        preds_dir / f"{run_key}_test.npz",
+        out_preds_dir / f"{run_key}_test.npz",
         y_true=data["test_df"]["label"].values,
         probs=test_probs,
         logits=test_logits.numpy(),
@@ -520,7 +539,7 @@ def run_student_training(
         jbb_probs=jbb_probs,
     )
     pretty_variant = f"{loss_variant.upper()}, No Distill" if no_distill else loss_variant.upper()
-    (preds_dir / f"{run_key}_meta.json").write_text(
+    (out_preds_dir / f"{run_key}_meta.json").write_text(
         json.dumps(
             {
                 "name": f"DeBERTa-v3-Small ({pretty_variant}, seed={run_seed})",
@@ -533,6 +552,22 @@ def run_student_training(
                 "temperature": opt_t,
                 "tau_95": tau_95,
                 "tau_1pct": tau_1pct,
+                "protocol": {
+                    "backbone": student_id,
+                    "epochs": epochs,
+                    "fgm_enabled": enable_fgm,
+                    "fgm_epsilon": fgm_eps,
+                    "alpha_distill": alpha_distill,
+                    "distill_temperature": distill_temp,
+                    "llrd_decay": float(cfg["training"]["optimizer"].get("llrd_decay", 0.90)),
+                    "backbone_lr": float(cfg["training"]["optimizer"].get("backbone_lr", 2.5e-5)),
+                    "head_lr": 8.0e-5,
+                    "batch_size": batch_size,
+                    "grad_accum": grad_accum,
+                    "max_seq_len": int(cfg["model"].get("max_sequence_length", 256)),
+                    "keep_ckpts": keep_ckpts,
+                    "train_duration_sec": train_duration_sec,
+                },
                 "metrics": metrics,
             },
             indent=2,
@@ -984,6 +1019,14 @@ def main() -> None:
         action="store_true",
         help="In Phase 2, skip student training and only regenerate OOD reports and 300 DPI figures.",
     )
+    parser.add_argument("--epochs", type=int, default=3, help="Student training epochs (default: 3).")
+    parser.add_argument("--disable-fgm", action="store_true", help="Disable FGM adversarial perturbations.")
+    parser.add_argument(
+        "--preds-dir",
+        type=Path,
+        default=None,
+        help="Optional directory for prediction .npz/_meta.json outputs (defaults to reports/predictions).",
+    )
     args = parser.parse_args()
 
     t0 = time.time()
@@ -996,7 +1039,17 @@ def main() -> None:
     if args.phase == 1:
         teacher_logits = train_teacher_stage1(cfg, data, tokenizer, device)
         primary_model = run_student_training(
-            cfg, data, tokenizer, teacher_logits, loss_variant="cs_afl", run_seed=42, keep_ckpts=True, epochs=3, device=device
+            cfg,
+            data,
+            tokenizer,
+            teacher_logits,
+            loss_variant="cs_afl",
+            run_seed=42,
+            keep_ckpts=True,
+            epochs=args.epochs,
+            device=device,
+            enable_fgm=not args.disable_fgm,
+            preds_dir=args.preds_dir,
         )
         assert primary_model is not None
         run_soup_and_onnx_export(cfg, data, tokenizer, primary_model, device)
@@ -1017,7 +1070,7 @@ def main() -> None:
                 no_dist = lv_clean.endswith("_no_distill")
                 base_lv = lv_clean[: -len("_no_distill")] if no_dist else lv_clean
                 runs = [(base_lv, int(sd.strip()), no_dist)]
-            preds_dir = REPO_ROOT / "reports/predictions"
+            preds_dir = args.preds_dir if args.preds_dir is not None else (REPO_ROOT / "reports/predictions")
             for loss_variant, seed, no_dist in runs:
                 tag = f"{loss_variant}_no_distill" if no_dist else loss_variant
                 run_key = f"deberta_v3_small_{tag}_seed{seed}"
@@ -1032,9 +1085,11 @@ def main() -> None:
                     loss_variant=loss_variant,
                     run_seed=seed,
                     keep_ckpts=False,
-                    epochs=3,
+                    epochs=args.epochs,
                     device=device,
                     no_distill=no_dist,
+                    enable_fgm=not args.disable_fgm,
+                    preds_dir=preds_dir,
                 )
         if not args.only_run:
             generate_final_reports_and_figures(data)
